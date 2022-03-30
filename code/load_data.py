@@ -7,7 +7,7 @@
 
 import json
 
-import Dataset
+from dataset import Dataset
 
 
 class DataLoader:
