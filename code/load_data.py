@@ -8,23 +8,14 @@
 """
 
 import json
+import os
 import pdb
+import io
+from contextlib import redirect_stdout, redirect_stderr
 
 import numpy as np
 import pandas as pd
 import datasets # from HuggingFace
-
-from data import Dataset
-
-
-def flatten_targets(target_str):
-    # Flatten target groups, returns list of all unique targets
-    flattened = set()
-    for targets in eval(target_str):
-        for target in targets.split(', '):
-            flattened.add(groups_norm.get(target, target))
-    return list(flattened)
-        
 
 class DataLoader:
     """ Load, process datasets """
@@ -72,19 +63,13 @@ class DataLoader:
                 label = 'hegemonic'
         return label
 
-    def load(self, dataset: Dataset):
-        """ Load a dataset. Usually overwritten by subclasses
+    def load(self, dataset):
+        """ Load a dataset to dataset.data. Usually overwritten by subclasses
         """
+        print(f"Loading {dataset.name}")
+        dataset.data = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[0]), index_col=0)
 
-        # Call dataset-specific function load function
-        # This loads the dataset and adds 'hate' and 'target_groups' columns
-        load_dataset = getattr(self, f'load_{dataset.name}')
-        load_dataset(dataset)
-
-        # Do common processing
-        self.common_processing(dataset)
-
-    def process(self, dataset: Dataset):
+    def process(self, dataset):
         """ Do processing and naming of columns shared across datasets
          Each dataset dataframe will have a
          * index named 'text_id' with unique post/comment ID,
@@ -96,8 +81,19 @@ class DataLoader:
             Result will be saved in dataset.data
         """
 
+        print(f'Processing {dataset.name}...')
+    
+        # Assign binary hate column
+        self.label_hate(dataset)
+
+        # Get target_groups list column
+        self.extract_target_groups(dataset)
+
+        # Rename text col
+        self.rename_text_column(dataset)
+
         # Assign group label to instances
-        data['group_label'] = data.target_groups.map(self.assign_label)
+        dataset.data['group_label'] = dataset.data.target_groups.map(self.assign_label)
 
         # Control group column
         #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
@@ -111,55 +107,82 @@ class DataLoader:
 
         print('\t\tdone.')
 
+    def extract_target_groups(self, dataset):
+        """ Extract target groups into a list column. Usually overwritten by specific datasets. """
+        assert 'target_groups' in dataset.data.columns
+
+    def label_hate(self, dataset):
+        """ Assign a binary hate column. Usually overwritten for specific datasets. """
+        assert 'hate' in dataset.data.columns and dataset.data['hate'].dtype == bool
+
+    def rename_text_column(self, dataset):
+        """ Rename text column to 'text'. Usually overwritten for specific datasets. """
+        assert 'text' in dataset.data.columns
+
+    def save(self, dataset):
+        """ Save out dataset """
+        out_dirpath = os.path.join(dataset.dirpath, 'processed')
+        if not os.path.exists(out_dirpath):
+            os.mkdir(out_dirpath)
+        outpath = os.path.join(out_dirpath, f'{dataset.name}_binary_hate_targets.csv')
+        dataset.data.to_csv(outpath)
+        print(f"\tSaved out processed {dataset.name}")
 
 class Kennedy2020Loader(DataLoader):
     """ Load Kennedy+2020 dataset """
 
-    def load_kennedy2020(self, dataset):
-        """ Kennedy+2020 dataset """
+    def load(self, dataset):
+        """ Load/download data """
+        print("Loading kennedy2020...")
+        with redirect_stderr(io.StringIO()) as f:
+            data = datasets.load_dataset(*dataset.load_paths)['train'].to_pandas()
 
-        ## Download/load data
-        dataset = datasets.load_dataset('ucberkeley-dlab/measuring-hate-speech', 'binary')['train'].to_pandas()
-        target_cols = [col for col in data.columns.tolist() if col.startswith('target_')]
-        group_target_cols = [col for col in target_cols if 'disability' in col or (col.count('_')>1 and 'other' not in col)]
-        
         # Combine annotations for the same comments
         # Just do an "any" approach for targets, mean for hate speech scores
+        target_cols = [col for col in data.columns.tolist() if col.startswith('target_')]
         aggregators = {col: 'any' for col in target_cols}
         aggregators.update({'hate_speech_score': 'mean', 'text': 'first'})
         comments = data.groupby('comment_id').agg(aggregators)
-        
-        # ## Process data
-        def extract_group(colname):
-            # Extract group name from column name
-            if 'disability' in colname:
-                group = '_'.join(colname.split('_')[1:])
-            else:
-                group = '_'.join(colname.split('_')[2:])
-            return group
-        
-        def extract_targets(row):
-            """ Args:
-                    row: row as a Series (from apply)
-            """
-            targets = [groups_norm.get(extract_group(colname), extract_group(colname)) for colname in row[row==True].index]
-            if len(targets) > 0:
-                return targets
-            else:
-                return None
-        
-        # Assign group label to instances
-        comments['target_groups'] = comments[group_target_cols].progress_apply(extract_targets, axis=1)
         dataset.data = comments
-        
-    def load_cad(self, dataset):
-        """ Contextual Abuse Dataset (CAD) """
 
-        print("Loading cad...")
-        #csvpath = '/storage2/mamille3/data/hate_speech/cad/cad_v1_1.tsv'
-        csvpath = dataset.load_args[0]
-        data = pd.read_csv(csvpath, sep='\t', index_col=0) # type: ignore
+    def label_hate(self, dataset):
+        threshold = 1
+        dataset.data['hate'] = dataset.data['hate_speech_score'].map(lambda x: True if x>threshold else False)
+
+    def extract_target_groups(self, dataset):
+        target_cols = [col for col in dataset.data.columns.tolist() if col.startswith('target_')]
+        group_target_cols = [col for col in target_cols if 'disability' in col or (col.count('_')>1 and 'other' not in col)]
+        dataset.data['target_groups'] = dataset.data[group_target_cols].progress_apply(self.extract_targets, axis=1)
+        
+    @classmethod
+    def extract_group(colname: str):
+        # Extract group name from column name
+        if 'disability' in colname:
+            group = '_'.join(colname.split('_')[1:])
+        else:
+            group = '_'.join(colname.split('_')[2:])
+        return group
     
+    def extract_targets(self, row):
+        """ Args:
+                row: row as a Series (from apply)
+        """
+        targets = [self.groups_norm.get(self.extract_group(colname), self.extract_group(colname)) \
+            for colname in row[row==True].index]
+        if len(targets) > 0:
+            return targets
+        else:
+            return None
+        
+        
+class CadLoader(DataLoader):
+    """ Contextual Abuse Dataset (CAD) """
+
+    def load(self, dataset):
+        csvpath = os.path.join(dataset.dirpath, dataset.load_paths[0])
+        dataset.data = pd.read_csv(csvpath, sep='\t', index_col=0) # type: ignore
+    
+    def label_hate(self, dataset):
         # ## Process data
         label_map = {
                 'Neutral': False,
@@ -170,63 +193,124 @@ class Kennedy2020Loader(DataLoader):
                 'CounterSpeech': False
             }
 
-        data['hate'] = data.annotation_Primary.map(label_map.get)
-        data['target_groups'] = data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) else None)
+        dataset.data['hate'] = dataset.data.annotation_Primary.map(label_map.get)
 
+    def extract_target_groups(self, dataset):
+        dataset.data['target_groups'] = dataset.data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) else None)
+
+    def rename_text_column(self, dataset):
         # Rename text col
-        data.rename(columns={'meta_text': 'text'}, inplace=True)
+        dataset.data.rename(columns={'meta_text': 'text'}, inplace=True)
 
-        dataset.data = data
 
-    def load_elsherief2021(self, dataset):
-        """ Load and process ElSherief+2021 """
+class HatexplainLoader(DataLoader):
+    """ HateXplain dataset """
+
+    def load(self, dataset):
+        print(f"Loading {dataset.name}...")
+        lines = []
+        fpath = os.path.join(dataset.dirpath, dataset.load_paths[0])
+        with open(fpath) as f:
+            json_data = json.load(f)
+            
+        for entry_id, entry in json_data.items():
+            lines.append({'text_id': entry['post_id'], 
+                          'text': ' '.join(entry['post_tokens']),
+                          'targets': list(set([target for targets in [item['target'] for item in entry['annotators']] for target in targets if target not in ['None', 'Other']])),
+                          'hate': any([item['label'] == 'hatespeech' for item in entry['annotators']])
+                         })
+        dataset.data = pd.DataFrame(lines)
+
+    def extract_target_groups(self, dataset):
+        dataset.data['target_groups'] = dataset.data['targets'].map(
+            lambda x: [self.groups_norm.get(t.lower(), t.lower()) for t in x])
+
+
+class Elsherief2021Loader(DataLoader):
+    """ Load and process ElSherief+2021 """
+
+    def load(self, dataset):
         print("Loading elsherief2021...")
         ## Load those annotated with target (implicit hate)
-        implicit_targeted = pd.read_csv(dataset.load_args[0], sep='\t')
+        implicit_targeted = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[0]), sep='\t')
         ## Load stage 1 annotations, get instances not labeled hateful
-        stg1 = pd.read_csv(dataset.load_args[1], sep='\t')
-        
-        ## ## Process data
-        ## Filter to instances with targets. Annotate type of target. Binarize hate column
+        stg1 = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[1]), sep='\t')
         not_hate = stg1[stg1['class'] == 'not_hate']
         ## Concatenate the non-hate in and rename columns, etc (fill in with implicit)
-        data = pd.concat([implicit_targeted, not_hate])
-        data['class'].fillna('implicit_hate', inplace=True)
-        data['hate'] = data['class'] == 'implicit_hate'
+        dataset.data = pd.concat([implicit_targeted, not_hate])
+
+    def label_hate(self, dataset):
+        dataset.data['class'].fillna('implicit_hate', inplace=True)
+        dataset.data['hate'] = dataset.data['class'] == 'implicit_hate'
          
+    def extract_target_groups(self, dataset):
         ## Annotate target type
-        data['target_groups'] = data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else None)
+        dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else None)
         
         ## Control group column
         #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
         
-        ## Rename text col, check for NaNs
-        data.rename(columns={'post': 'text'}, inplace=True)
-        
-        dataset.data = data
-        print('\t\tdone.')
+    def rename_text_column(self, dataset):
+        """ Rename text column """
+        dataset.data.rename(columns={'post': 'text'}, inplace=True)
 
-    def load_sbic(self, dataset):
-       """ Social Bias Inference Corpus """
 
+class SbicLoader(DataLoader):
+    """ Social Bias Inference Corpus """
+    
+    def load(self, dataset):
         print("Loading sbic...")
         folds = []
         # Combine training, dev and test sets
-        for fpath in dataset.load_args:
-            folds.append(pd.read_csv(fpath, index_col=0))
+        for fname in dataset.load_paths:
+            folds.append(pd.read_csv(os.path.join(dataset.dirpath, fname), index_col=0))
             
-        data = pd.concat(folds).reset_index()
-        
-        # Process data
-        data['hate'] = data['offensiveYN'] > 0.5 # this follows the paper's threshold
-        data['target_groups'] = data['targetMinority'].map(flatten_targets)
-        
-        data.rename(columns={'post': 'text'}, inplace=True)
-        
-        dataset.data = data
-        print('\t\tdone.')
+        dataset.data = pd.concat(folds).reset_index()
+            
+    def label_hate(self, dataset):
+        """ Label hate binary column """
+        dataset.data['hate'] = dataset.data['offensiveYN'] > 0.5 # this follows the paper's threshold
+
+    def extract_target_groups(self, dataset):
+        dataset.data['target_groups'] = dataset.data['targetMinority'].map(self.flatten_targets)
+        dataset.data.rename(columns={'post': 'text'}, inplace=True)
+
+    def flatten_targets(self, target_str):
+        """ Flatten target groups, returns list of all unique targets """
+        flattened = set()
+        for targets in eval(target_str):
+            for target in targets.split(', '):
+                flattened.add(self.groups_norm.get(target, target))
+        return list(flattened)
         
 
+class Salminen2018Loader(DataLoader):
+    """ Salminen+2018 """
+
+    def extract_target_groups(self, dataset):
+        """ Extract target groups column """
+        subcols = [col for col in dataset.data.columns if 'Sub' in col]
+        dataset.data['subs'] = dataset.data[subcols].agg(lambda x: [el for el in x if isinstance(el, str)], axis=1)
+        dataset.data['target_groups'] = dataset.data['subs'].map(lambda x: [
+            self.groups_norm.get(self.extract_group(t), self.extract_group(t)) for t in x])
+        
+    def label_hate(self, dataset):
+        """ Label binary hate speech column """
+        dataset.data['hate'] = dataset.data['Class']=='Hateful'
+        
+    @classmethod
+    def extract_group(target):
+        return target.lower().replace('racist towards', '').replace('towards', '').strip()
+        
+        # Assign to control group
+        #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
+        
+    def rename_text_column(self, dataset):
+        """ Rename text column """
+        pdb.set_trace()
+        dataset.data.rename(columns={'message': 'text'}, inplace=True)  
+        dataset.data.rename(columns={'post': 'text'}, inplace=True)
+        
 
 """ OLD JUPYTER NOTEBOOK CODE """
 ## ## Create data structures for use across all datasets
@@ -251,241 +335,6 @@ class Kennedy2020Loader(DataLoader):
 ## * 'in_control' column: boolean whether a targeted group is in the control list of identity terms
 ## * 'text' column
 #hate_datasets = {}
-#
-## ## View/count targets
-#
-## In[28]:
-#
-#
-## View group targets that aren't yet labeled
-#for col in group_target_cols:
-#    if 'disability' in col:
-#        group = '_'.join(col.split('_')[1:])
-#    else:
-#        group = '_'.join(col.split('_')[2:])
-#    if len(group) > 0 and group not in group_labels:
-#        print(group)
-#
-#
-## In[16]:
-#
-#
-#targets_flattened = [t for targets in comments.target_groups.dropna() for t in targets]
-#targets = Counter(targets_flattened)
-#target_counts = pd.Series(targets)
-#target_counts.sort_values(ascending=False).head()
-#target_counts.head()
-#
-## Add counts to group_target_distros
-#dataset = 'kennedy2020'
-#for group, count in target_counts.iteritems():
-#    group_target_distros.append(
-#        {'group': group, 'group_label': group_labels.get(group, 'other'), 'dataset': dataset, 'count': count}
-#    )
-#
-#vc = comments.group_label.value_counts()
-#print(vc)
-#print()
-#print(len(comments))
-#print(sum(comments.group_label.value_counts()))
-#print()
-#print(vc/len(comments))
-#
-#line.extend([vc['hegemonic'], vc['marginalized'], vc['other']])
-#print(line)
-#group_label_distros.append(line)
-#group_label_distros
-#
-#
-## In[17]:
-#
-#
-## Get top groups in each split
-## Assumes target_counts is sorted with most frequent at the top
-#
-#n=5
-#corpus = 'kennedy2020'
-#for label in ['hegemonic', 'marginalized', 'other']:
-#    # print(label)
-#    selected_groups = [group for group in target_counts.index if group_labels.get(group)==label]
-#    filtered = target_counts[selected_groups]
-#    new_row = pd.DataFrame([[corpus, label, ', '.join(filtered.head(n).index.tolist())]], columns=top_groups.columns)
-#    top_groups = pd.concat([top_groups, new_row], axis=0)
-#    # print(filtered.head(n))
-#    print()
-#    
-#top_groups
-#
-#
-## ## Violin plots of hate speech scores for different labels
-#
-## In[16]:
-#
-#
-#import plotly.express as px
-#
-#px.violin(targeted, y='hate_speech_score', x='group_label')
-#
-#
-## # Salminen+2018
-#
-## ## Load data
-#
-## In[38]:
-#
-#
-## Load data, save to csv
-#import pandas as pd
-#
-## path = '/storage2/mamille3/data/hate_speech/salminen2018/salminen2018.xlsx'
-## data = pd.read_excel(path, index_col=0)
-## data.to_csv('/storage2/mamille3/data/hate_speech/salminen2018/salminen2018.csv')
-#data = pd.read_csv('/storage2/mamille3/data/hate_speech/salminen2018/salminen2018.csv', index_col=0)
-#line = ['salminen2018', len(data)]
-#print(len(data))
-#data.head()
-#
-#
-## ## Process data
-#
-## In[39]:
-#
-#
-## Combine sub columns into a list
-#import numpy as np
-#
-#subcols = [col for col in data.columns if 'Sub' in col]
-#data['subs'] = data[subcols].agg(lambda x: [el for el in x if isinstance(el, str)], axis=1)
-#print(data.columns)
-#data.head()
-#
-#print(data['Class'].value_counts())
-#
-#data['targeted'] = data['subs'].map(lambda x: len(x) > 0)
-#
-#print(data[['Class', 'targeted']].value_counts())
-#
-#targeted = data[data['targeted']].copy()
-#print(len(targeted))
-#line.append(len(targeted))
-#print(len(data))
-#
-#data['hate'] = data['Class']=='Hateful'
-#data['hate'].value_counts()
-#
-## Assign a label to every instance with a target in the dataset
-#import numpy as np
-#
-## target_counts = Counter() # weird way of doing this, see SBIC section for better way
-#
-#def extract_group(target):
-#    return target.lower().replace('racist towards', '').replace('towards', '').strip()
-#
-## def assign_label_old(targets):
-##     if len(targets) == 0:
-##         label = np.nan
-##     else:
-##         label = 'other'
-##     target_groups = [extract_group(target) for target in targets]
-##     for group in target_groups:
-##         if group in group_labels:
-##             target_counts[group] +=1
-##     labels = set([group_labels.get(group, 'other') for group in target_groups])
-##     if 'marginalized' in labels and not 'hegemonic' in labels:
-##         label = 'marginalized'
-##     elif 'hegemonic' in labels:
-##         label = 'hegemonic'
-##     return label
-#
-## Assign group label to instances
-#data['target_groups'] = data['subs'].map(lambda x: [groups_norm.get(extract_group(t), extract_group(t)) for t in x])
-#
-#def assign_label(targets):
-#    if isinstance(targets, float) or len(targets) == 0:
-#        label = np.nan
-#    else:
-#        label = 'other'
-#        labels = set([group_labels.get(target, 'other') for target in targets])
-#        if 'marginalized' in labels and not 'hegemonic' in labels:
-#            label = 'marginalized'
-#        elif 'hegemonic' in labels:
-#            label = 'hegemonic'
-#        return label
-#
-## Assign group label to instances
-#data['group_label'] = data.target_groups.map(assign_label)
-## data['group_label'] = data.subs.map(assign_label)
-## print(target_counts.most_common())
-#
-## Assign to control group
-#data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
-#print(data.in_control.sum())
-#
-## Rename text col, check for NaNs
-#data.rename(columns={'message': 'text'}, inplace=True)
-#data.rename(columns={'post': 'text'}, inplace=True)
-#print(len(data))
-#data = data.dropna(subset=['text'], how='any')
-#print(len(data))
-#
-## Check index
-#comments.index.name = 'text_id'
-#assert not comments.index.duplicated(keep=False).any()
-#
-#hate_datasets['salminen2018'] = data
-#data[['subs', 'group_label']].head()
-#
-#
-## ## View, count targets
-#
-## In[19]:
-#
-#
-## View groups that are not already labeled
-#from collections import Counter
-#
-## targets_flat = [extract_group(t) for targets in data.subs for t in targets]
-## targets = Counter(targets_flat)
-## print(len(targets))
-## targets.most_common()
-## [(target, count) for (target, count) in targets.most_common() if not target in group_labels]
-#targets_flattened = [t for targets in data.target_groups.dropna() for t in targets]
-#targets = Counter(targets_flattened)
-#target_counts = pd.Series(targets).sort_values(ascending=False)
-#
-## Add counts to group_target_distros
-#dataset = 'salminen2018'
-#for group, count in target_counts.iteritems():
-#    group_target_distros.append(
-#        {'group': group, 'group_label': group_labels.get(group, 'other'), 'dataset': dataset, 'count': count}
-#    )
-#
-#vc = data.group_label.value_counts()
-#line.extend([vc['hegemonic'], vc['marginalized'], vc['other']])
-#print(line)
-#group_label_distros.append(line)
-#print(group_label_distros)
-#pd.concat([vc, data.group_label.value_counts(normalize=True)], axis=1)
-#
-#
-## In[24]:
-#
-#
-## Get top groups in each split
-## Assumes target_counts is sorted with most frequent at the top
-#
-#n=5
-#corpus = 'salminen2018'
-#for label in ['hegemonic', 'marginalized', 'other']:
-#    # print(label)
-#    selected_groups = [group for group in target_counts.index if group_labels.get(group)==label]
-#    filtered = target_counts[selected_groups]
-#    new_row = pd.DataFrame([[corpus, label, ', '.join(filtered.head(n).index.tolist())]], columns=top_groups.columns)
-#    top_groups = pd.concat([top_groups, new_row], axis=0)
-#    # print(filtered.head(n))
-#    print()
-#    
-#top_groups
 #
 #
 ## # HateXplain
@@ -533,40 +382,9 @@ class Kennedy2020Loader(DataLoader):
 #            label = 'hegemonic'
 #        return label
 #
-## Assign group label to instances
-#data['group_label'] = data.target_groups.map(assign_label)
-#print(data['group_label'].value_counts())
-#print(data['group_label'].value_counts(normalize=True))
 #
-#
-## In[11]:
-#
-#
-## View groups that are not already labeled
-#from collections import Counter
-#
-#[(target, count) for (target, count) in Counter([t for targets in data.target_groups for t in targets]).most_common() if not target in group_labels]
-#
-#
-## # Save out processed datasets
-## For later splitting into folds for training ML models
-#
-## In[40]:
-#
-#
-#hate_datasets.keys()
-#
-#
-## In[41]:
-#
-#
-#import pickle
-#
-#outpath = '/storage2/mamille3/hegemonic_hate/tmp/processed_datasets.pkl'
-#with open(outpath, 'wb') as f:
-#    pickle.dump(hate_datasets, f)
-#
-#
+
+
 ## # Multilingual and Multi-aspect dataset (MLMA)
 #
 ## In[35]:

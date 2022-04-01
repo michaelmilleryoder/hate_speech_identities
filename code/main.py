@@ -9,7 +9,6 @@
             3.3 Estimate and save out a PCA plot
 """
 
-from load_data import *
 from data import Dataset
 
 
@@ -18,25 +17,33 @@ def main():
 
     # Load datasets (if I modify this much, it should come from a config file or command line argument)
     datasets = [
-        #Dataset('kennedy2020', ['ucberkeley-dlab/measuring-hate-speech', 'binary']),
-        Dataset('elsherief2021', loader=ElSherief2021Loader, load_args=[
-            '/storage2/mamille3/data/hate_speech/elsherief2021/implicit_hate_v1_stg3_posts.tsv',        
-            '/storage2/mamille3/data/hate_speech/elsherief2021/implicit_hate_v1_stg1_posts.tsv',
+        Dataset('kennedy2020', 
+            load_paths=['ucberkeley-dlab/measuring-hate-speech','binary']),
+        Dataset('elsherief2021', 
+            load_paths=[
+            'implicit_hate_v1_stg3_posts.tsv',        
+            'implicit_hate_v1_stg1_posts.tsv',
+            ],
+        ),
+        Dataset('salminen2018'),
+        Dataset('sbic',
+             load_paths=[
+            'SBIC.v2.agg.trn.csv',
+            'SBIC.v2.agg.dev.csv',
+            'SBIC.v2.agg.tst.csv',
         ]),
-        #Dataset('salminen2018', fpaths=['/storage2/mamille3/data/hate_speech/salminen2018/salminen2018.csv'], 
-        #    pandas_args="index_col=0"),
-        Dataset('sbic', load_args=[
-            '/storage2/mamille3/data/hate_speech/sbic/SBIC.v2.agg.trn.csv',
-            '/storage2/mamille3/data/hate_speech/sbic/SBIC.v2.agg.dev.csv',
-            '/storage2/mamille3/data/hate_speech/sbic/SBIC.v2.agg.tst.csv',
-        ]),
-        Dataset('cad', load_args=['/storage2/mamille3/data/hate_speech/cad/cad_v1_1.tsv']),
+        Dataset('cad', 
+            load_paths=['cad_v1_1.tsv']),
+        Dataset('hatexplain',
+            load_paths=['Data/dataset.json'],
+        ),
     ]
 
 
     for dataset in datasets:
         loader = dataset.loader() 
         loader.load(dataset)
+        loader.save(dataset)
 
 
 if __name__ == '__main__':
