@@ -16,6 +16,8 @@ from contextlib import redirect_stdout, redirect_stderr
 import numpy as np
 import pandas as pd
 import datasets # from HuggingFace
+from tqdm import tqdm
+tqdm.pandas()
 
 class DataLoader:
     """ Load, process datasets """
@@ -40,15 +42,6 @@ class DataLoader:
 
         # Make sure all normalized terms have group labels
         assert len([label for label in set(self.groups_norm.values()) if label not in self.group_labels]) == 0
-        """
-        # ## Control group terms
-
-        path = '/storage2/mamille3/hegemonic_hate/control_identity_terms.txt'
-        with open(path, 'r') as f:
-            control_terms = f.read().splitlines()
-        print(len(control_terms))
-        control_terms
-        """
 
     def assign_label(self, targets):
         """ Assign labels to target groups """
@@ -95,17 +88,25 @@ class DataLoader:
         # Assign group label to instances
         dataset.data['group_label'] = dataset.data.target_groups.map(self.assign_label)
 
-        # Control group column
-        #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
-
         # Drop nans in text column
         dataset.data = dataset.data.dropna(subset=['text'], how='any')
 
         # Check, rename index
         dataset.data.index.name = 'text_id'
         assert not dataset.data.index.duplicated(keep=False).any()
+        #if dataset.data.index.duplicated(keep=False).any():
+        #    pdb.set_trace()
 
-        print('\t\tdone.')
+    def label_control(self, dataset):
+        """ Label which instances target terms in the control set """
+        ""
+        # Load control group terms
+        path = '/storage2/mamille3/hegemonic_hate/resources/control_identity_terms.txt'
+        with open(path, 'r') as f:
+            control_terms = f.read().splitlines()
+
+        # Control group column
+        dataset.data['in_control'] = dataset.data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
 
     def extract_target_groups(self, dataset):
         """ Extract target groups into a list column. Usually overwritten by specific datasets. """
@@ -156,7 +157,7 @@ class Kennedy2020Loader(DataLoader):
         dataset.data['target_groups'] = dataset.data[group_target_cols].progress_apply(self.extract_targets, axis=1)
         
     @classmethod
-    def extract_group(colname: str):
+    def extract_group(cls, colname: str):
         # Extract group name from column name
         if 'disability' in colname:
             group = '_'.join(colname.split('_')[1:])
@@ -180,7 +181,7 @@ class CadLoader(DataLoader):
     """ Contextual Abuse Dataset (CAD) """
 
     def load(self, dataset):
-	print("Loading cad...")
+        print("Loading cad...")
         csvpath = os.path.join(dataset.dirpath, dataset.load_paths[0])
         dataset.data = pd.read_csv(csvpath, sep='\t', index_col=0) # type: ignore
     
@@ -239,7 +240,7 @@ class Elsherief2021Loader(DataLoader):
         stg1 = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[1]), sep='\t')
         not_hate = stg1[stg1['class'] == 'not_hate']
         ## Concatenate the non-hate in and rename columns, etc (fill in with implicit)
-        dataset.data = pd.concat([implicit_targeted, not_hate])
+        dataset.data = pd.concat([implicit_targeted, not_hate]).reset_index()
 
     def label_hate(self, dataset):
         dataset.data['class'].fillna('implicit_hate', inplace=True)
@@ -248,9 +249,6 @@ class Elsherief2021Loader(DataLoader):
     def extract_target_groups(self, dataset):
         ## Annotate target type
         dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else None)
-        
-        ## Control group column
-        #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
         
     def rename_text_column(self, dataset):
         """ Rename text column """
@@ -301,17 +299,12 @@ class Salminen2018Loader(DataLoader):
         dataset.data['hate'] = dataset.data['Class']=='Hateful'
         
     @classmethod
-    def extract_group(target):
+    def extract_group(cls, target):
         return target.lower().replace('racist towards', '').replace('towards', '').strip()
-        
-        # Assign to control group
-        #data['in_control'] = data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
         
     def rename_text_column(self, dataset):
         """ Rename text column """
-        pdb.set_trace()
         dataset.data.rename(columns={'message': 'text'}, inplace=True)  
-        dataset.data.rename(columns={'post': 'text'}, inplace=True)
         
 
 """ OLD JUPYTER NOTEBOOK CODE """

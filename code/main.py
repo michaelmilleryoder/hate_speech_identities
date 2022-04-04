@@ -9,13 +9,19 @@
             3.3 Estimate and save out a PCA plot
 """
 
+import pdb
+
 import numpy as np
+import pandas as pd
 
 from data import Dataset
+from split_datasets import ComparisonSplits
 
 
 class Experiment:
-    """ Class to run an 'experiment', just a run to get output """
+    """ Class to run an 'experiment', just a run to get output 
+        TODO: separate into experiments with ComparisonSplits, IdentityPCA
+    """
 
     def __init__(self, datasets, calculate_control=True, classify=True, run_pca=True):
         """ Args:
@@ -23,18 +29,50 @@ class Experiment:
                 classify [bool]: test classification with and without dominant groups vs control
                 run_pca [bool]: run PCA on identity group splits
         """
-        self.datasets = None
+        self.datasets = datasets
         self.calculate_control = calculate_control
         self.classify = classify
         self.run_pca = run_pca
         self.loaders = None
+        self.splits = None
 
     def run(self):
         """ Run experiment """
 
+        # Load, process datasets
+        self.load_process_datasets()
+
+        # Create dataset splits for heg/no-heg comparison with control/no-control
+        self.create_dataset_splits()
+
+        # Train and evaluate LR classifier on dataset splits (heg/no-heg vs control/no-control)
+
+        # Create identity-based datasets
+
+        # Train and evaluate classifiers on identity datasets, run PCA
+
+    def create_dataset_splits(self):
+        """ Create dataset splits of heg/no-heg vs control/no-control """
+        self.view_heg_vs_control()
+        hate_ratio = 0.3
+        self.splits = ComparisonSplits(self.datasets, hate_ratio)
+        self.splits.create_heg_control()
+
+    def view_heg_vs_control(self):
+        """ Print number of instances marked heg vs marked control per dataset """
+        for dataset in self.datasets:
+            n_hegemonic = len(dataset.data.query("group_label == 'hegemonic'"))
+            n_control = len(dataset.data.query("in_control == True"))
+            print(dataset.name)
+            print(f'# hegemonic: {n_hegemonic}')
+            print(f'# control: {n_control}')
+            print()
+
+    def load_process_datasets(self):
+        """ Load and process datasets """
         self.load_datasets()
         self.process_datasets()
-        if calculate_control:
+        if self.calculate_control:
             self.get_control_terms()
         self.label_control()
         self.save_datasets()
@@ -74,12 +112,14 @@ class Experiment:
             target_counts = dataset.target_counts()
             target_counts['dataset'] = dataset.name
             target_counts['group_label'] = target_counts.group.map(lambda group: loader.group_labels.get(group, 'other'))
+            group_targets.append(target_counts)
         target_dataset_counts = pd.concat(group_targets)
         target_dataset_counts.drop_duplicates(inplace=True)
 
         ## Get distributions of counts over datasets for normalized hegemonic labels
         heg_targets = target_dataset_counts.query('group_label == "hegemonic"')
         heg_counts = heg_targets.drop(columns=['group_label']).pivot_table(index=['group'], columns=['dataset'])
+        heg_counts.fillna(0, inplace=True)
         log_heg_counts = heg_counts.apply(np.log2).replace(-np.inf, -1)
         log_heg_counts['magnitude'] = np.linalg.norm(log_heg_counts[[col for col in log_heg_counts.columns if col[0] == 'count']], axis=1)
         log_heg_counts = log_heg_counts.sort_values('magnitude', ascending=False).drop(columns='magnitude')
@@ -87,6 +127,8 @@ class Experiment:
         # Find marginalized terms with similar frequency distributions across datasets as margemonic ones
         marg_targets = target_dataset_counts.query('group_label == "marginalized"')
         marg_counts = marg_targets.drop(columns=['group_label']).pivot_table(index=['group'], columns=['dataset'])
+        marg_counts.fillna(0, inplace=True)
+        #log_marg_counts = marg_counts.apply(np.log2).replace(-np.inf, -1)
         log_marg_counts = marg_counts.apply(np.log2).replace(-np.inf, -1)
         marg = log_marg_counts.copy()
         control_terms = []
@@ -97,9 +139,11 @@ class Experiment:
             marg.drop(closest_marg, inplace=True) 
 
         # Save control terms out
-        outpath = '/storage2/mamille3/hegemonic_hate/control_identity_terms.txt'
+        outpath = '/storage2/mamille3/hegemonic_hate/resources/control_identity_terms.txt'
+        print("Control terms:")
         with open(outpath, 'w') as f:
             for term in control_terms:
+                print(f'\t{term}')
                 f.write(f'{term}\n')
         
         # Check counts across datasets for heg and control

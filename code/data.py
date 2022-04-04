@@ -2,6 +2,8 @@
 
 import os
 from collections import Counter
+import pdb
+
 import pandas as pd
 
 import load_data
@@ -27,5 +29,6 @@ class Dataset:
         """ Returns a series of counts of normalized group targets (from target_groups col) """
         targets_flattened = [t for targets in self.data.target_groups.dropna() for t in targets]
         targets = Counter(targets_flattened)
-        target_counts = pd.Series(targets).sort_values(ascending=False)
+        target_counts = pd.DataFrame(pd.Series(targets), columns=['count']).rename_axis('group').reset_index()
+        target_counts.sort_values(['count'], ascending=False, inplace=True)
         return target_counts
