@@ -37,7 +37,7 @@ class ComparisonSplits():
         """
         self.datasets = datasets
         self.hate_ratio = hate_ratio
-        self.splits = {} # dataset.name: {}
+        self.splits = {dataset.name: {'hegsplits': {}, 'controlsplits': {}} for dataset in self.datasets}
 
     def get_stats(self):
         """ Print statistics on dataset splits, including comparisons.
@@ -135,8 +135,17 @@ class ComparisonSplits():
 
          # Save out
         self.save_splits()
-        print("Saved splits")
-        print('*********************')
+        print("Saved comparison splits")
+
+    def load_heg_control(self):
+        """ Load heg and control dataset splits """
+        for dataset_name, splits in self.splits.items():
+            # Load csv
+            dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+            for splits_name in splits:
+                for split_name in ['with_special', 'no_special']:
+                    csvpath = os.path.join(dataset_path, f'{dataset_name}_{self.hate_ratio}hate_{splits_name}_{split_name}.csv')
+                    self.splits[dataset_name][splits_name][split_name] = pd.read_csv(csvpath, index_col=0)
 
     def create_splits(self, split_criteria, dataset):
         """ Create splits to compare performance.
@@ -154,7 +163,6 @@ class ComparisonSplits():
         splits_name = 'controlsplits'
         self.splits[dataset.name][splits_name], n_samples, n_special = self.sample_to_ratio(dataset.data, split_criteria[splits_name], n_samples=n_samples, n_special=n_special)
 
-
     def save_splits(self):
         """ Save out splits """
 
@@ -165,5 +173,5 @@ class ComparisonSplits():
                 os.makedirs(dataset_path)
             for splits_name, s in splits.items():
                 for split_name, split in s.items():
-                    csvpath = os.path.join(dataset_path, f'{dataset_name}_{self.hate_ratio}hate_{split_name}.csv')
+                    csvpath = os.path.join(dataset_path, f'{dataset_name}_{self.hate_ratio}hate_{splits_name}_{split_name}.csv')
                     split.to_csv(csvpath)

@@ -6,7 +6,7 @@ import pdb
 
 import pandas as pd
 
-import load_data
+import load_process_dataset
 
 class Dataset:
     """ Superclass for storing data and attributes of datasets """
@@ -18,16 +18,23 @@ class Dataset:
                 load_paths: list of arguments for loading the datasets (like file paths)
         """
         self.name = name
-        self.loader = getattr(load_data, f'{self.name.capitalize()}Loader')
+        self.loader = getattr(load_process_dataset, f'{self.name.capitalize()}Loader')
         self.dirpath = os.path.join('/storage2/mamille3/data/hate_speech', name)
         self.load_paths = load_paths
         if self.load_paths is None:
             self.load_paths = [f'{name}.csv']
         self.data = None
 
-    def target_counts(self):
-        """ Returns a series of counts of normalized group targets (from target_groups col) """
-        targets_flattened = [t for targets in self.data.target_groups.dropna() for t in targets]
+    def target_counts(self, just_hate=False):
+        """ Returns a series of counts of normalized group targets (from target_groups col) 
+            Args:
+                just_hate: if True, just return targets from instances marked for hate
+        """
+        if just_hate:
+            data = self.data.query('hate')
+        else:
+            data = self.data
+        targets_flattened = [t for targets in data.target_groups.dropna() for t in targets]
         targets = Counter(targets_flattened)
         target_counts = pd.DataFrame(pd.Series(targets), columns=['count']).rename_axis('group').reset_index()
         target_counts.sort_values(['count'], ascending=False, inplace=True)
