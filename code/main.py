@@ -20,6 +20,7 @@ from heg_comparison import HegComparison
 from load_process_datasets import DatasetsLoader
 from identity_pca import IdentityPCA
 
+
 def main():
     """ Run experiments """
 

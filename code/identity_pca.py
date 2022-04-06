@@ -2,6 +2,7 @@
 
 import pickle
 import pdb
+import itertools
 import json
 
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -25,6 +26,7 @@ class IdentityPCA:
         self.create_datasets = create_datasets
         self.hate_ratio = hate_ratio
         self.identity_datasets = None
+        self.expanded_datasets = None
         self.scores = []
         self.group_labels = None
         self.reduced = None
@@ -37,11 +39,61 @@ class IdentityPCA:
         else:
             self.load_identity_datasets()
 
+        # Test viability of combining identity datasets
+        self.test_combined()
+
         # Run LR cross-dataset predictions
         self.train_eval_lr()
     
         # Run, save out PCA
         self.run_pca()
+
+    def test_combined(self):
+        """ Test if there are any sets of datasets that could be combined uniformly to have enough
+            hate against hegemonic categories to plot a PCA combined by identity group """
+
+        self.load_group_labels()
+
+        dfs = [self.expanded_datasets[name].query('hate')[['target_groups', 'identity_group']] for name in sorted(self.expanded_datasets)]
+        combined = pd.concat(dfs, keys=sorted(self.expanded_datasets.keys()), names=['dataset', 'text_id']).reset_index(level='dataset')
+        combined['group_label'] = combined['identity_group'].map(self.group_labels.get)
+        heg_counts = combined.query('group_label == "hegemonic"').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', 'group_label'], ascending=False).drop(columns='group_label').rename(columns={'target_groups': 'instance_count'})
+
+        dataset_names = self.expanded_datasets.keys()
+        combos = itertools.combinations(dataset_names, 3)
+
+        min_hegemonic_categories = 3
+        min_combined_instances = 1000
+        possible_dataset_combos = set()
+        combo_counts = {}
+        potential = {}
+        viable = {}
+
+        for datasets in list(combos):
+            selected = heg_counts.loc[heg_counts.index.get_level_values('dataset').isin(datasets)]
+            counts = selected.groupby(selected.index.get_level_values('identity_group')).count()
+            
+            # Count how many hegemonic categories these datasets would cover
+            avail_counts = counts[counts['instance_count']==len(datasets)]
+            if len(avail_counts) >= min_hegemonic_categories:
+                possible_dataset_combos.add(datasets)
+                possible_combined = selected[selected.index.get_level_values('identity_group').isin(avail_counts.index)]
+
+                # Calculate how many instances could be in combined datasets 
+                combined_count = possible_combined.groupby(possible_combined.index.get_level_values('identity_group')).agg(
+                    {'instance_count': lambda x: min(x)*len(datasets)})
+                combo_counts[datasets] = combined_count
+                viable_combined = combined_count[combined_count['instance_count']>=min_combined_instances]
+                if len(viable_combined) > 0:
+                    potential[datasets] = viable_combined
+                if len(viable_combined) > min_hegemonic_categories:
+                    viable[datasets] = viable_combined
+            
+        if len(viable) > 0:
+            print(viable)
+        else:
+            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories}")
+            print(f"Closest is {potential}")
         
     def load_identity_datasets(self):
         """ Load identity datasets that have already been saved out """
@@ -49,12 +101,15 @@ class IdentityPCA:
         path = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
         with open(path, 'rb') as f:
             self.identity_datasets = pickle.load(f)
+        path = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
+        with open(path, 'rb') as f:
+            self.expanded_datasets = pickle.load(f)
 
     def create_identity_datasets(self):
         """ Create identity datasets """
         print("Creating identity datasets...")
         ic = IdentityDatasetCreator(self.processed_datasets, self.hate_ratio)
-        self.identity_datasets = ic.create_datasets()
+        self.identity_datasets, self.expanded_datasets = ic.create_datasets()
 
     def train_eval_lr(self):
         """ Run logistic regression cross-dataset predictions, save to self.scores """
@@ -94,14 +149,18 @@ class IdentityPCA:
             scores.append(score_line)
                 
         self.scores = pd.DataFrame(scores).set_index('train_dataset')
+
+    def load_group_labels(self):
+        """ Load group labels"""
+        if self.group_labels is None:
+            path = '/storage2/mamille3/hegemonic_hate/resources/group_labels.json'
+            with open(path, 'r') as f:
+                self.group_labels = json.load(f) 
     
     def run_pca(self):
         """ Run PCA over self.scores """
 
-        # Load group labels
-        path = '/storage2/mamille3/hegemonic_hate/resources/group_labels.json'
-        with open(path, 'r') as f:
-            self.group_labels = json.load(f) 
+        self.load_group_labels()
 
         pca = PCA(n_components=2)
         self.reduced = pca.fit_transform(self.scores.values)

@@ -62,7 +62,7 @@ class IdentityDatasetCreator:
         # Create identity datasets
         self.form_identity_datasets()
 
-        return self.folds
+        return (self.folds, self.expanded_datasets)
 
     def form_identity_datasets(self):
         """ For each selected identity target in selected datasets, form datasets with training and test folds """
@@ -115,6 +115,10 @@ class IdentityDatasetCreator:
         #     for split_name, split in s.items():
         #         csvpath = os.path.join(dataset_path, f'{dataset}_{hate_ratio}hate_{split_name}.csv')
         #         split.to_csv(csvpath)
+
+        outpath = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
+        with open(outpath, 'wb') as f:
+            pickle.dump(self.expanded_datasets, f)
         
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
@@ -186,8 +190,7 @@ class IdentityDatasetCreator:
             #self.expanded_datasets[dataset.name] = data.join(s)
             self.expanded_datasets[dataset.name] = data.explode('identity_groups').rename(columns={'identity_groups': 'identity_group'})
 
-        # Save out since takes such a long time
-        # Haven't written a loader for this since once I have the identity dataset won't need to run this
+        # Save out in case I want to examine it
         outpath = '/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets.pkl'
         with open(outpath, 'wb') as f:
             pickle.dump(self.expanded_datasets, f)
