@@ -1,3 +1,7 @@
+*.swp
+__pycache__
+data/
+output/
 conda_env/
-jupyter/.ipynb_checkpoints/
 tmp/
+jupyter/.ipynb_checkpoints

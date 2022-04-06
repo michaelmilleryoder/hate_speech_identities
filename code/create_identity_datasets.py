@@ -68,7 +68,7 @@ class IdentityDatasetCreator:
         """ For each selected identity target in selected datasets, form datasets with training and test folds """
 
         for dataset_name in tqdm(sorted(set([dataset_name for dataset_name, identity in self.selected_groups]))):
-            identity_datasets = self.create_identity_datasets(dataset_name, self.processed_datasets[dataset_name])
+            identity_datasets = self.create_identity_datasets(dataset_name, self.expanded_datasets[dataset_name])
             
             # Split into train and test folds
             self.folds.update(self.create_folds(identity_datasets))
@@ -142,6 +142,8 @@ class IdentityDatasetCreator:
             ], axis=0)
         resampled = resampled.sample(frac=1, random_state=9)
 
+        if len(resampled) == 0:
+            pdb.set_trace()
         get_stats(resampled, identity)
         return resampled
 
@@ -149,6 +151,8 @@ class IdentityDatasetCreator:
         """ Create splits to compare performance.
             split_criteria: dict with keys of split, values the pandas query to remove instances in the no-split
             Each split should have the same number of instances.
+            Args:
+                data: expanded dataset
         """
         
         identity_datasets = {}
@@ -175,13 +179,15 @@ class IdentityDatasetCreator:
             print(dataset.name)
             data = dataset.data.copy()
             data['identity_groups'] = data['target_groups'].map(self.assign_groups)
-            s = data['identity_groups'].progress_apply(pd.Series, 1).stack() # takes forever
-            s.index = s.index.droplevel(-1)
-            s.name = 'identity_group'
-            del data['identity_groups']
-            self.expanded_datasets[dataset] = data.join(s)
+            #s = data['identity_groups'].progress_apply(pd.Series, 1).stack() # takes forever
+            #s.index = s.index.droplevel(-1)
+            #s.name = 'identity_group'
+            #del data['identity_groups']
+            #self.expanded_datasets[dataset.name] = data.join(s)
+            self.expanded_datasets[dataset.name] = data.explode('identity_groups').rename(columns={'identity_groups': 'identity_group'})
 
         # Save out since takes such a long time
+        # Haven't written a loader for this since once I have the identity dataset won't need to run this
         outpath = '/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets.pkl'
         with open(outpath, 'wb') as f:
             pickle.dump(self.expanded_datasets, f)
@@ -205,29 +211,22 @@ class IdentityDatasetCreator:
         # Get frequncies of grouped labels across datasets
         group_targets = [] # target_group, group_label, dataset, count
         for dataset in self.processed_datasets:
+            #if dataset.name == 'cad':
+            #    pdb.set_trace()
             target_counts = dataset.target_counts(just_hate=True)
             target_counts['dataset'] = dataset.name
             target_counts['identity_group'] = target_counts.group.map(lambda x: self.identity_groups.get(x, [x] if x in self.grouped_identities else []))
-#)
+            target_counts = target_counts.loc[target_counts.identity_group.map(lambda x: len(x) > 0)]
             group_targets.append(target_counts)
         target_dataset_counts = pd.concat(group_targets)
         target_dataset_counts.drop_duplicates(subset=['group', 'dataset'], inplace=True)
 
-        s = target_dataset_counts.identity_group.apply(pd.Series, 1).stack()
-        s.index = s.index.droplevel(-1)
-        s.name = 'identity_group'
-        del target_dataset_counts['identity_group']
-        target_group_counts = target_dataset_counts.join(s)
-        
+        target_group_counts = target_dataset_counts.explode('identity_group')
         dataset_group_counts = target_group_counts.groupby(['dataset', 'identity_group'])['count'].sum()
         filtered = dataset_group_counts[dataset_group_counts >= threshold]
-        print(len(filtered))
-        print(len(filtered.index.get_level_values('identity_group').unique()))
         
         # Save out
         selected_dataset_groups = filtered.index.tolist()
-        pdb.set_trace()
-        
         outpath = '/storage2/mamille3/hegemonic_hate/tmp/selected_dataset_groups.pkl'
         with open(outpath, 'wb') as f:
             pickle.dump(selected_dataset_groups, f)

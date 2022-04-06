@@ -30,7 +30,7 @@ def main():
     hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
     create_splits = False # create comparison splits
     run_pca = True
-    create_identity_datasets = True
+    create_identity_datasets = False
 
     # Datasets (if I modify this much, it should come from a config file or command line argument)
     datasets = [
@@ -58,6 +58,7 @@ def main():
 
     # Load/process datasets
     if load_datasets:
+        print("Loading datasets...")
         loader = DatasetsLoader(datasets)
         loader.load_datasets(reprocess=reprocess_datasets)
 

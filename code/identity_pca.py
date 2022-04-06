@@ -62,10 +62,10 @@ class IdentityPCA:
         scores = []
     
         for name, folds in tqdm(self.identity_datasets.items()):
-            tqdm.write(name)
+            tqdm.write(str(name))
             
             # Extract features
-            tqdm.write('Extracting features...')
+            #tqdm.write('Extracting features...')
             bow = {}
             # Check for NaNs
             if folds['train']['text'].isnull().values.any():
@@ -80,12 +80,11 @@ class IdentityPCA:
             bow.keys()
 
             # Train LR model 
-            tqdm.write('Training model...')
+            #tqdm.write('Training and evaluating model...')
             clfs[name] = LogisticRegression(solver='liblinear')
             clfs[name].fit(bow['train'], folds['train']['hate'])
 
             # Evaluate
-            tqdm.write('Evaluating...')
             score_line = {'train_dataset': name}
             
             for test_name, test_folds in self.identity_datasets.items():
@@ -100,7 +99,7 @@ class IdentityPCA:
         """ Run PCA over self.scores """
 
         # Load group labels
-        path = '/storage2/mamille3/hegemonic_hate/group_labels.json'
+        path = '/storage2/mamille3/hegemonic_hate/resources/group_labels.json'
         with open(path, 'r') as f:
             self.group_labels = json.load(f) 
 

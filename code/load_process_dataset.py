@@ -12,6 +12,7 @@ import os
 import pdb
 import io
 from contextlib import redirect_stdout, redirect_stderr
+from ast import literal_eval
 
 import numpy as np
 import pandas as pd
@@ -136,8 +137,9 @@ class DataLoader:
         print(f"Loading processed {dataset.name}")
         dirpath = os.path.join(dataset.dirpath, 'processed')
         path = os.path.join(dirpath, f'{dataset.name}_binary_hate_targets.csv')
+        #dataset.data = pd.read_csv(path, index_col=0, converters={'target_groups': literal_eval})
         dataset.data = pd.read_csv(path, index_col=0)
-        pdb.set_trace()
+        dataset.data['target_groups'] = dataset.data.target_groups.map(literal_eval)
 
 
 class Kennedy2020Loader(DataLoader):
@@ -184,7 +186,7 @@ class Kennedy2020Loader(DataLoader):
         if len(targets) > 0:
             return targets
         else:
-            return None
+            return []
         
         
 class CadLoader(DataLoader):
@@ -209,7 +211,7 @@ class CadLoader(DataLoader):
         dataset.data['hate'] = dataset.data.annotation_Primary.map(label_map.get)
 
     def extract_target_groups(self, dataset):
-        dataset.data['target_groups'] = dataset.data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) else None)
+        dataset.data['target_groups'] = dataset.data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) else [])
 
     def rename_text_column(self, dataset):
         # Rename text col
@@ -258,7 +260,7 @@ class Elsherief2021Loader(DataLoader):
          
     def extract_target_groups(self, dataset):
         ## Annotate target type
-        dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else None)
+        dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else [])
         
     def rename_text_column(self, dataset):
         """ Rename text column """
@@ -283,6 +285,9 @@ class SbicLoader(DataLoader):
 
     def extract_target_groups(self, dataset):
         dataset.data['target_groups'] = dataset.data['targetMinority'].map(self.flatten_targets)
+
+    def rename_text_column(self, dataset):
+        """ Rename text column """
         dataset.data.rename(columns={'post': 'text'}, inplace=True)
 
     def flatten_targets(self, target_str):
