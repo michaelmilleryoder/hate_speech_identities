@@ -1,9 +1,9 @@
 muslims
-arabic/middle eastern people
 latinx people
-bisexual people
+asian people
+buddhists
 mexican people
-non-binary people
+disability_hearing_impaired
 black men
 feminists
 chinese women
@@ -13,4 +13,4 @@ black lives matter
 iranians
 child sexual assault victims
 japanese people
-buddhists
+romani people

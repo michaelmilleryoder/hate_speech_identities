@@ -46,13 +46,13 @@ class IdentityDatasetCreator:
         self.selected_groups = None
         self.expanded_datasets = None
         self.folds = {}
+        self.threshold = 500 # minimum number of intances of hate to include an identity in a dataset
 
     def create_datasets(self):
         """ Create and return identity datasets """
 
         # Count, select which identities to group in datasets
-        threshold = 500
-        self.dataset_identity_groups(threshold) # can also load them if they are calculated
+        self.dataset_identity_groups() # can also load them if they are calculated
 
         # Expand datasets with annotations for identity groups 
         # (duplicate instances with multiple target identity groups)
@@ -205,7 +205,7 @@ class IdentityDatasetCreator:
         self.grouped_identities = set(self.identity_groups.keys()).union(
             set([val for vals in self.identity_groups.values() for val in vals]))
 
-    def dataset_identity_groups(self, threshold):
+    def dataset_identity_groups(self):
         """ Return a list of tuples (dataset, identity) of identity targets with a
             minimum number of instances of hate against them in that dataset """
 
@@ -226,7 +226,7 @@ class IdentityDatasetCreator:
 
         target_group_counts = target_dataset_counts.explode('identity_group')
         dataset_group_counts = target_group_counts.groupby(['dataset', 'identity_group'])['count'].sum()
-        filtered = dataset_group_counts[dataset_group_counts >= threshold]
+        filtered = dataset_group_counts[dataset_group_counts >= self.threshold]
         
         # Save out
         selected_dataset_groups = filtered.index.tolist()

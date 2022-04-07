@@ -20,6 +20,7 @@ import datasets # from HuggingFace
 from tqdm import tqdm
 tqdm.pandas()
 
+
 class DataLoader:
     """ Load, process a dataset.
         TODO: probably make this DataProcessor instead, consider moving basic saving and loading to data.py
@@ -320,3 +321,26 @@ class Salminen2018Loader(DataLoader):
     def rename_text_column(self, dataset):
         """ Rename text column """
         dataset.data.rename(columns={'message': 'text'}, inplace=True)  
+
+
+class CivilcommentsLoader(DataLoader):
+    """ CivilCommentsIdentities dataset """
+
+    def extract_target_groups(self, dataset):
+        """ Extract target groups column """
+        target_cols = dataset.data.columns[dataset.data.columns.tolist().index('male'):-2]
+        exclude_cols = ['other_religion', 'other_race_or_ethnicity']
+        target_cols = [el for el in target_cols if el not in exclude_cols]
+
+        threshold = 0.5 # minimum proportion of raters that labeled that target group for it to count
+        dataset.data['targets'] = dataset.data[target_cols].values.tolist()
+        dataset.data['targets'] = dataset.data['targets'].apply(lambda x: [target_cols[i] for i, el in zip(range(len(target_cols)), x) if el>=threshold])
+        dataset.data['target_groups'] = dataset.data['targets'].map(lambda x: [self.groups_norm.get(t, t) for t in x])
+
+    def label_hate(self, dataset):
+        """ Label binary hate speech column """
+        threshold = 0.5 # is maybe too low for the 'hate speech' label
+        dataset.data['hate'] = dataset.data['toxicity']>=threshold 
+
+    def rename_text_column(self, dataset):
+        dataset.data.rename(columns={'comment_text': 'text'}, inplace=True)

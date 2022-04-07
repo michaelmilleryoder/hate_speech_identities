@@ -25,10 +25,10 @@ def main():
     """ Run experiments """
 
     # Settings (could load from a config)
-    load_datasets = True # load raw or processed datasets instead of task-specific splits
+    load_datasets = False # load raw or processed datasets instead of task-specific splits
     reprocess_datasets = False
-    run_comparison = False
     hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
+    run_comparison = False
     create_splits = False # create comparison splits
     run_pca = True
     create_identity_datasets = False
@@ -55,6 +55,9 @@ def main():
         Dataset('hatexplain',
             load_paths=['Data/dataset.json'],
         ),
+        Dataset('civilcomments',
+            load_paths=['all_data.csv'],
+        )
     ]
 
     # Load/process datasets

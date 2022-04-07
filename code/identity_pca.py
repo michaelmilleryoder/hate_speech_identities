@@ -60,7 +60,10 @@ class IdentityPCA:
         heg_counts = combined.query('group_label == "hegemonic"').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', 'group_label'], ascending=False).drop(columns='group_label').rename(columns={'target_groups': 'instance_count'})
 
         dataset_names = self.expanded_datasets.keys()
-        combos = itertools.combinations(dataset_names, 3)
+        n_datasets_range = range(3, 7)
+        combos = []
+        for i in n_datasets_range:
+            combos.extend(list(itertools.combinations(dataset_names, 3)))
 
         min_hegemonic_categories = 3
         min_combined_instances = 1000
@@ -84,11 +87,11 @@ class IdentityPCA:
                     {'instance_count': lambda x: min(x)*len(datasets)})
                 combo_counts[datasets] = combined_count
                 viable_combined = combined_count[combined_count['instance_count']>=min_combined_instances]
-                if len(viable_combined) > 0:
-                    potential[datasets] = viable_combined
-                if len(viable_combined) > min_hegemonic_categories:
+                if len(viable_combined) >= min_hegemonic_categories - 1:
+                    potential[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_hegemonic_categories]
+                if len(viable_combined) >= min_hegemonic_categories:
                     viable[datasets] = viable_combined
-            
+
         if len(viable) > 0:
             print(viable)
         else:
