@@ -34,40 +34,98 @@ def get_stats(data, identity):
         
 
 class IdentityDatasetCreator:
+    """ Create or load separate and/or combined identity datasets """
     
-    def __init__(self, processed_datasets, hate_ratio):
+    def __init__(self, processed_datasets, hate_ratio, create: bool = True):
         """ Args:
                 processed_datasets: full datasets to split by identity
+                create: whether to create the datasets. If False, will load them instead
         """ 
         self.processed_datasets = processed_datasets
         self.hate_ratio = hate_ratio
+        self.create = create
         self.identity_groups = None
         self.grouped_identities = None
-        self.selected_groups = None
+        self.selected_dataset_groups = None # for separate identity datasets
+        self.selected_datasets = None # for combined identity datasets
         self.expanded_datasets = None
         self.folds = {}
+        self.combined_folds = {}
         self.threshold = 500 # minimum number of intances of hate to include an identity in a dataset
+        self.folds_path = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
+        self.combined_path = None
+        self.expanded_path = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
 
-    def create_datasets(self):
+    def create_sep_datasets(self):
         """ Create and return identity datasets """
 
-        # Count, select which identities to group in datasets
-        self.dataset_identity_groups() # can also load them if they are calculated
+        if self.create:
+            # Count, select which identities to group in datasets
+            self.dataset_identity_groups()
 
-        # Expand datasets with annotations for identity groups 
-        # (duplicate instances with multiple target identity groups)
-        print("Expanding datasets with target identity groups...")
-        self.expand_datasets()
+            # Expand datasets with annotations for identity groups 
+            # (duplicate instances with multiple target identity groups)
+            self.expand_datasets()
 
-        # Create identity datasets
-        self.form_identity_datasets()
+            # Create identity datasets
+            self.form_identity_datasets()
+
+        else:
+            self.load_sep_datasets()
 
         return (self.folds, self.expanded_datasets)
+
+    def load_sep_datasets(self):
+        """ Load separate identity datasets """
+        print("Loading identity datasets...")
+        with open(self.folds_path, 'rb') as fp:
+            self.folds = pickle.load(fp)
+        with open(self.expanded_path, 'rb') as ep:
+            self.expanded_datasets = pickle.load(ep)
+
+    def create_combined_datasets(self, selected_datasets):
+        """ Create and return combined identity datasets
+            Args:
+                selected_datasets: tuple of the names of datasets selected for the combinations
+        """
+        
+        self.selected_datasets = selected_datasets
+        self.combined_path = f'/storage2/mamille3/hegemonic_hate/data/combined_identity_splits_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
+        if self.create:
+            self.form_combined_datasets()
+        else:
+            self.load_combined_datasets()
+
+        return (self.combined_folds, self.expanded_datasets)
+
+    def form_combined_datasets(self):
+        """ Uniform sample from selected datasets to combine them into identity-based datasets """
+
+        filtered_dataset_identities = [(dataset, identity) for dataset, identity in self.selected_dataset_identities if dataset in self.selected_datasets]
+        # this only selects identities with a threshold minimum of hate for each identity in each dataset. 
+        # Could relax it
+        identities = {identity for dataset, identity in filtered_dataset_identities}
+        combined_identity_datasets = {} # identity: data
+        for identity in identities:
+            min_len = min(len(self.expanded_datasets[dataset]) for dataset in self.selected_datasets)
+            combined_identity_dataset[identity] = pd.concat(
+                [self.expanded_datasets[dataset].sample(min_len, random_state=9) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
+            
+            # Split into train and test folds
+            self.combined_folds.update(self.create_folds(combined_identity_datasets))
+            print('*********************')
+            
+        # Save out
+        self.save_combined_identity_datasets()
+
+    def load_combined_datasets(self):
+        with open(self.combined_path, 'rb') as f:
+           self.combined_folds = pickle.load(f)
 
     def form_identity_datasets(self):
         """ For each selected identity target in selected datasets, form datasets with training and test folds """
 
-        for dataset_name in tqdm(sorted(set([dataset_name for dataset_name, identity in self.selected_groups]))):
+        for dataset_name in tqdm(sorted(set([dataset_name for dataset_name, identity in self.selected_dataset_groups]))):
             identity_datasets = self.create_identity_datasets(dataset_name, self.expanded_datasets[dataset_name])
             
             # Split into train and test folds
@@ -75,7 +133,7 @@ class IdentityDatasetCreator:
             print('*********************')
             
         # Save out
-        self.save_identity_datasets()
+        self.save_sep_identity_datasets()
         print("Saved splits")
 
     def create_folds(self, identity_datasets):
@@ -100,10 +158,9 @@ class IdentityDatasetCreator:
         
         return folds
 
-    def save_identity_datasets(self):
+    def save_sep_identity_datasets(self):
         # Save out folds
-        outpath = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
-        with open(outpath, 'wb') as f:
+        with open(self.folds_path, 'wb') as f:
             pickle.dump(self.folds, f)
         print("Saved identity folds out")
             
@@ -116,10 +173,14 @@ class IdentityDatasetCreator:
         #         csvpath = os.path.join(dataset_path, f'{dataset}_{hate_ratio}hate_{split_name}.csv')
         #         split.to_csv(csvpath)
 
-        outpath = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
-        with open(outpath, 'wb') as f:
+        with open(self.expanded_path, 'wb') as f:
             pickle.dump(self.expanded_datasets, f)
         
+    def save_combined_datasets(self):
+        with open(self.combined_path, 'wb') as f:
+            pickle.dump(self.combined_folds, f)
+        print("Saved combined identity folds out")
+
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
             Just select instances with that identity group for hate.
@@ -152,15 +213,13 @@ class IdentityDatasetCreator:
         return resampled
 
     def create_identity_datasets(self, dataset, data):
-        """ Create splits to compare performance.
-            split_criteria: dict with keys of split, values the pandas query to remove instances in the no-split
-            Each split should have the same number of instances.
+        """ Create identity-based datasets 
             Args:
                 data: expanded dataset
         """
         
         identity_datasets = {}
-        dataset_identities_selected = [(dataset_name, identity) for dataset_name, identity in self.selected_groups if dataset_name==dataset]
+        dataset_identities_selected = [(dataset_name, identity) for dataset_name, identity in self.selected_dataset_groups if dataset_name==dataset]
         for dataset_name, identity in dataset_identities_selected:
             identity_datasets[(dataset, identity)] = self.sample_to_ratio(dataset, data, identity)
         return identity_datasets
@@ -234,4 +293,4 @@ class IdentityDatasetCreator:
         with open(outpath, 'wb') as f:
             pickle.dump(selected_dataset_groups, f)
 
-        self.selected_groups = selected_dataset_groups
+        self.selected_dataset_groups = selected_dataset_groups

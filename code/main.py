@@ -25,13 +25,13 @@ def main():
     """ Run experiments """
 
     # Settings (could load from a config)
-    load_datasets = False # load raw or processed datasets instead of task-specific splits
+    load_datasets = True # load raw or processed datasets instead of task-specific splits
     reprocess_datasets = False
     hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
     run_comparison = False
     create_splits = False # create comparison splits
     run_pca = True
-    create_identity_datasets = False
+    create_identity_datasets = True
 
     # Datasets (if I modify this much, it should come from a config file or command line argument)
     datasets = [

@@ -18,29 +18,41 @@ from create_identity_datasets import IdentityDatasetCreator
 
 class IdentityPCA:
 
-    def __init__(self, processed_datasets, create_datasets: bool = False, hate_ratio: float = 0.3):
+    def __init__(self, processed_datasets, combine: bool = False, create_datasets: bool = False, 
+            hate_ratio: float = 0.3):
         """ Args:
-                create_splits: whether to recreate splits. If False, will just load them
+                create_datasets: whether to recreate both separate and combined datasets. 
+                    If False, will just load them
+                combine: whether to combine identity datasets across dataset sources
         """
         self.processed_datasets = processed_datasets
+        self.combine = combine
         self.create_datasets = create_datasets
         self.hate_ratio = hate_ratio
-        self.identity_datasets = None
+        self.sep_identity_datasets = None # separate identity datasets
         self.expanded_datasets = None
+        self.combined_identity_datasets = None
         self.scores = []
         self.group_labels = None
         self.reduced = None
+        self.ic = None # IdentityDatasetCreator
 
     def run(self):
         """ Main function to run PCA """
         # Create identity datasets for heg/no-heg comparison with control/no-control
-        if self.create_datasets:
-            self.create_identity_datasets()
-        else:
-            self.load_identity_datasets()
+        self.load_sep_identity_datasets()
 
         # Test viability of combining identity datasets
-        self.test_combined()
+        viable, potential = self.test_combined()
+        if self.combine:
+            if len(viable) == 0:
+                n_instances = [df.sum() for df in list(potential.values())]
+                selected_datasets = list(potential.keys()).index(max(n_instances))
+                pdb.set_trace()
+            else:
+                pdb.set_trace()
+            self.load_combined_identity_datasets(selected_datasets)
+            pdb.set_trace()
 
         # Run LR cross-dataset predictions
         self.train_eval_lr()
@@ -90,36 +102,42 @@ class IdentityPCA:
                 if len(viable_combined) >= min_hegemonic_categories - 1:
                     potential[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_hegemonic_categories]
                 if len(viable_combined) >= min_hegemonic_categories:
-                    viable[datasets] = viable_combined
+                    viable[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_hegemonic_categories]
 
         if len(viable) > 0:
             print(viable)
         else:
             print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories}")
             print(f"Closest is {potential}")
-        
-    def load_identity_datasets(self):
-        """ Load identity datasets that have already been saved out """
-        print("Loading identity datasets...")
-        path = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
-        with open(path, 'rb') as f:
-            self.identity_datasets = pickle.load(f)
-        path = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
-        with open(path, 'rb') as f:
-            self.expanded_datasets = pickle.load(f)
 
-    def create_identity_datasets(self):
-        """ Create identity datasets """
-        print("Creating identity datasets...")
-        ic = IdentityDatasetCreator(self.processed_datasets, self.hate_ratio)
-        self.identity_datasets, self.expanded_datasets = ic.create_datasets()
+        return viable, potential
+        
+    def load_sep_identity_datasets(self):
+        """ Load or create separate identity datasets """
+
+        print("Creating/loading separate identity datasets...")
+        self.ic = IdentityDatasetCreator(self.processed_datasets, self.hate_ratio, create=self.create_datasets)
+        self.sep_identity_datasets, self.expanded_datasets = self.ic.create_sep_datasets()
+
+    def load_combined_identity_datasets(self, selected_datasets):
+        """ Load or create combined identity datasets 
+            Args:
+                selected_datasets: tuple of the names of datasets selected for the combinations
+        """
+        print("Creating/loading combined identity datasets...")
+        self.combined_identity_datasets = self.ic.create_combined_datasets(selected_datasets)
 
     def train_eval_lr(self):
         """ Run logistic regression cross-dataset predictions, save to self.scores """
         clfs = {}
         scores = []
+
+        if self.combine:
+            datasets = self.combined_identity_datasets
+        else:
+            datasets = self.sep_identity_datasets
     
-        for name, folds in tqdm(self.identity_datasets.items()):
+        for name, folds in tqdm(datasets):
             tqdm.write(str(name))
             
             # Extract features
@@ -145,7 +163,7 @@ class IdentityPCA:
             # Evaluate
             score_line = {'train_dataset': name}
             
-            for test_name, test_folds in self.identity_datasets.items():
+            for test_name, test_folds in datasets.items():
                 test_bow = vectorizer.transform(test_folds['test']['text'])
                 preds = clfs[name].predict(test_bow)
                 score_line[test_name] = f1_score(test_folds['test']['hate'], preds)
