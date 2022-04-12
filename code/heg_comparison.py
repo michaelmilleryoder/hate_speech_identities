@@ -100,6 +100,7 @@ class HegComparison:
 
                     scores[dataset_name][split] = []
                     for _ in range(5):
+                        # TODO: since there are duplicates, this should be splitting on unique indices
                         f1s = cross_validate(clf, data[split]['text'], data[split]['hate'], scoring=['f1'], cv=2)['test_f1'].tolist()
                         scores[dataset_name][split] += f1s
                         # confusion_matrices[dataset] = {}
