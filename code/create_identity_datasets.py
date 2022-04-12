@@ -36,14 +36,14 @@ def get_stats(data, identity):
 class IdentityDatasetCreator:
     """ Create or load separate and/or combined identity datasets """
     
-    def __init__(self, processed_datasets, hate_ratio, create: bool = True):
+    def __init__(self, processed_datasets, hate_ratio, create = True):
         """ Args:
                 processed_datasets: full datasets to split by identity
                 create: whether to create the datasets. If False, will load them instead
         """ 
         self.processed_datasets = processed_datasets
         self.hate_ratio = hate_ratio
-        self.create = create
+        self.create = create # False or list of either or both 'separate', 'combined'
         self.identity_groups = None
         self.grouped_identities = None
         self.selected_dataset_groups = None # for separate identity datasets
@@ -51,7 +51,8 @@ class IdentityDatasetCreator:
         self.expanded_datasets = None
         self.folds = {}
         self.combined_folds = {}
-        self.threshold = 500 # minimum number of intances of hate to include an identity in a dataset
+        self.threshold = 333 # minimum number of intances of hate to include an identity in a dataset
+            # Have put 500 for separate identity dataset PCA, 333 for combined over 3 datasets (to make 1000)
         self.folds_path = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
         self.combined_path = None
         self.expanded_path = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
@@ -96,27 +97,29 @@ class IdentityDatasetCreator:
         else:
             self.load_combined_datasets()
 
-        return (self.combined_folds, self.expanded_datasets)
+        return self.combined_folds
 
     def form_combined_datasets(self):
         """ Uniform sample from selected datasets to combine them into identity-based datasets """
 
-        filtered_dataset_identities = [(dataset, identity) for dataset, identity in self.selected_dataset_identities if dataset in self.selected_datasets]
+        filtered_dataset_identities = [(dataset, identity) for dataset, identity in self.selected_dataset_groups if dataset in self.selected_datasets]
         # this only selects identities with a threshold minimum of hate for each identity in each dataset. 
         # Could relax it
-        identities = {identity for dataset, identity in filtered_dataset_identities}
+        identities = [identity for dataset, identity in filtered_dataset_identities]
+        identities = [identity for identity in identities if identities.count(identity) == len(self.selected_datasets)]
         combined_identity_datasets = {} # identity: data
+
+        # Could run sample_to_ratio on concatenated expanded datasets instead
         for identity in identities:
-            min_len = min(len(self.expanded_datasets[dataset]) for dataset in self.selected_datasets)
-            combined_identity_dataset[identity] = pd.concat(
-                [self.expanded_datasets[dataset].sample(min_len, random_state=9) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
-            
-            # Split into train and test folds
-            self.combined_folds.update(self.create_folds(combined_identity_datasets))
-            print('*********************')
+            self.combined_folds[identity] = {}
+            for fold in ['train', 'test']:
+                min_len = min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
+                self.combined_folds[identity][fold] = pd.concat(
+                    [self.folds[(dataset, identity)][fold].sample(min_len, random_state=9) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
+                get_stats(self.combined_folds[identity][fold], identity)
             
         # Save out
-        self.save_combined_identity_datasets()
+        self.save_combined_datasets()
 
     def load_combined_datasets(self):
         with open(self.combined_path, 'rb') as f:
@@ -130,11 +133,10 @@ class IdentityDatasetCreator:
             
             # Split into train and test folds
             self.folds.update(self.create_folds(identity_datasets))
-            print('*********************')
+            #print('*********************')
             
         # Save out
         self.save_sep_identity_datasets()
-        print("Saved splits")
 
     def create_folds(self, identity_datasets):
         """ Create train and test folds
@@ -142,7 +144,7 @@ class IdentityDatasetCreator:
         
         folds = {}
         for name, data in identity_datasets.items():
-            print(name)
+            #print(name)
             # Split into train/test 60/40
             # Get, print differences between with-heg vs no-heg splits (can use indexes)
             inds = {}
@@ -154,7 +156,7 @@ class IdentityDatasetCreator:
             for fold in ['train', 'test']:
                 folds[name][fold] = data[data.index.isin(inds[fold])]
                 # Simple stats
-                print(f'\t{fold} length: {len(folds[name][fold])} ({folds[name][fold].hate.value_counts(normalize=True)[True]:.1%} hate)')
+                #print(f'\t{fold} length: {len(folds[name][fold])} ({folds[name][fold].hate.value_counts(normalize=True)[True]:.1%} hate)')
         
         return folds
 
@@ -179,7 +181,7 @@ class IdentityDatasetCreator:
     def save_combined_datasets(self):
         with open(self.combined_path, 'wb') as f:
             pickle.dump(self.combined_folds, f)
-        print("Saved combined identity folds out")
+        print(f"Saved combined {self.selected_datasets} identity folds out")
 
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
@@ -209,7 +211,7 @@ class IdentityDatasetCreator:
 
         if len(resampled) == 0:
             pdb.set_trace()
-        get_stats(resampled, identity)
+        #get_stats(resampled, identity)
         return resampled
 
     def create_identity_datasets(self, dataset, data):
@@ -239,7 +241,7 @@ class IdentityDatasetCreator:
 
         self.expanded_datasets = {}
         for dataset in tqdm(self.processed_datasets):
-            print(dataset.name)
+            tqdm.write(dataset.name)
             data = dataset.data.copy()
             data['identity_groups'] = data['target_groups'].map(self.assign_groups)
             #s = data['identity_groups'].progress_apply(pd.Series, 1).stack() # takes forever

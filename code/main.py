@@ -28,10 +28,15 @@ def main():
     load_datasets = True # load raw or processed datasets instead of task-specific splits
     reprocess_datasets = False
     hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
+
+    # Heg comparison settings
     run_comparison = False
     create_splits = False # create comparison splits
+
+    # PCA settings
     run_pca = True
-    create_identity_datasets = True
+    create_identity_datasets = True # False or list of either or both 'separate', 'combined'
+    combine_datasets = True
 
     # Datasets (if I modify this much, it should come from a config file or command line argument)
     datasets = [
@@ -73,7 +78,8 @@ def main():
 
     # Run identity split PCA
     if run_pca:
-        identity_pca = IdentityPCA(datasets, create_datasets=create_identity_datasets, hate_ratio=hate_ratio)
+        identity_pca = IdentityPCA(datasets, create_datasets=create_identity_datasets, 
+            hate_ratio=hate_ratio, combine=combine_datasets)
         identity_pca.run()
 
 

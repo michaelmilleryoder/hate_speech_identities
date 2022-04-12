@@ -139,7 +139,7 @@ class DataLoader:
         dirpath = os.path.join(dataset.dirpath, 'processed')
         path = os.path.join(dirpath, f'{dataset.name}_binary_hate_targets.csv')
         #dataset.data = pd.read_csv(path, index_col=0, converters={'target_groups': literal_eval})
-        dataset.data = pd.read_csv(path, index_col=0)
+        dataset.data = pd.read_csv(path, index_col=0, low_memory=False)
         dataset.data['target_groups'] = dataset.data.target_groups.map(literal_eval)
 
 

@@ -18,7 +18,7 @@ from create_identity_datasets import IdentityDatasetCreator
 
 class IdentityPCA:
 
-    def __init__(self, processed_datasets, combine: bool = False, create_datasets: bool = False, 
+    def __init__(self, processed_datasets, combine: bool = False, create_datasets = False, 
             hate_ratio: float = 0.3):
         """ Args:
                 create_datasets: whether to recreate both separate and combined datasets. 
@@ -27,7 +27,7 @@ class IdentityPCA:
         """
         self.processed_datasets = processed_datasets
         self.combine = combine
-        self.create_datasets = create_datasets
+        self.create_datasets = create_datasets # False or list of either or both 'separate', 'combined'
         self.hate_ratio = hate_ratio
         self.sep_identity_datasets = None # separate identity datasets
         self.expanded_datasets = None
@@ -46,13 +46,11 @@ class IdentityPCA:
         viable, potential = self.test_combined()
         if self.combine:
             if len(viable) == 0:
-                n_instances = [df.sum() for df in list(potential.values())]
-                selected_datasets = list(potential.keys()).index(max(n_instances))
-                pdb.set_trace()
+                n_instances = [df.instance_count.sum() for df in list(potential.values())]
+                selected_datasets = list(potential.keys())[n_instances.index(max(n_instances))]
             else:
                 pdb.set_trace()
             self.load_combined_identity_datasets(selected_datasets)
-            pdb.set_trace()
 
         # Run LR cross-dataset predictions
         self.train_eval_lr()
@@ -107,7 +105,7 @@ class IdentityPCA:
         if len(viable) > 0:
             print(viable)
         else:
-            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories}")
+            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories} identities")
             print(f"Closest is {potential}")
 
         return viable, potential
@@ -137,7 +135,7 @@ class IdentityPCA:
         else:
             datasets = self.sep_identity_datasets
     
-        for name, folds in tqdm(datasets):
+        for name, folds in tqdm(datasets.items()):
             tqdm.write(str(name))
             
             # Extract features
@@ -188,15 +186,27 @@ class IdentityPCA:
         self.reduced = pd.DataFrame(self.reduced, index=self.scores.index)
 
         # Assign group labels to groups so can visualize colors
-        self.reduced['group_label'] = self.reduced.index.map(lambda x: self.group_labels.get(x[1]))
+        if self.combine:
+            self.reduced['group_label'] = self.reduced.index.map(lambda x: self.group_labels.get(x))
+        else:
+            self.reduced['group_label'] = self.reduced.index.map(lambda x: self.group_labels.get(x[1]))
 
         # Plot
+        if self.combine:
+            title = f'Prediction weight PCA over combined identity datasets {self.ic.selected_datasets}'
+        else:
+            title = 'Prediction weight PCA over identities within datasets'
         fig = px.scatter(self.reduced, x=0, y=1, color='group_label', 
-            text=self.reduced.index, width=1000, height=800)
+            text=self.reduced.index, width=1000, height=800,
+            title=title)
         fig.update_traces(marker={'size': 20})
         fig.update_traces(textposition='top center')
 
         # Save out
-        outpath = '/storage2/mamille3/hegemonic_hate/output/dataset_identity_pca.png'
+        if self.combine:
+            outname = 'combined_identity_pca'
+        else:
+            outname = 'dataset_identity_pca'
+        outpath = f'/storage2/mamille3/hegemonic_hate/output/{outname}.png'
         fig.write_image(outpath)
         print(f"Saved dataset identity PCA to {outpath}")
