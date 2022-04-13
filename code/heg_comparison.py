@@ -7,7 +7,7 @@ import pdb
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import make_pipeline
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import cross_validate
+from sklearn.model_selection import cross_validate, GroupKFold
 from sklearn.metrics import classification_report, confusion_matrix
 import pandas as pd
 import numpy as np
@@ -16,6 +16,7 @@ from tqdm import tqdm
 
 from data import Dataset
 from split_datasets import ComparisonSplits
+from bert_classifier import BertClassifier
 
 
 class HegComparison:
@@ -34,8 +35,11 @@ class HegComparison:
         self.hate_ratio = hate_ratio
         self.comparisons = None
 
-    def run(self):
-        """ Run experiment """
+    def run(self, clf_name):
+        """ Run experiment 
+        Args:
+            clf_name: One of {'bert', 'lr'}
+        """
 
         # Create dataset splits for heg/no-heg comparison with control/no-control
         if self.create_splits:
@@ -44,8 +48,9 @@ class HegComparison:
             self.load_dataset_splits()
 
         # Train and evaluate LR classifier on dataset splits (heg/no-heg vs control/no-control)
-        print("Training and evaluating LR classifiers on splits...")
-        self.train_eval_lr()
+        print(f"Training and evaluating {clf_name} classifiers on splits...")
+        self.train_eval_cv(clf_name)
+        #self.train_eval_lr()
 
     def create_dataset_splits(self):
         """ Create dataset splits of heg/no-heg vs control/no-control """
@@ -68,6 +73,69 @@ class HegComparison:
             print(f'# hegemonic: {n_hegemonic}')
             print(f'# control: {n_control}')
             print()
+
+    def train_eval_cv(self, clf_name):
+        """ Train classifiers and evaluate with cross-validation """
+        f1_scores = {}
+        for splits in ['hegsplits', 'controlsplits']:
+            scores = {}
+            f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
+            sigs = []
+
+            for dataset_name in tqdm(self.comparisons.splits):
+                tqdm.write(dataset_name)
+                data = {}
+                scores[dataset_name] = {}
+                for split, df in self.comparisons.splits[dataset_name][splits].items():
+                    data[split] = df
+
+                    # Check for NaNs
+                    if data[split]['text'].isnull().values.any():
+                        pdb.set_trace()
+
+                    if clf_name == 'bert':
+                        clf = BertClassifier()
+
+                    for _ in range(5):
+                        # Define the fold splitter
+                        kfold = GroupKFold(n_splits=2)
+
+                        for train, test in kfold(data[split]['text'], data[split]['hate'], data[split].index):
+                            # Vectorize input
+
+                            # Train, evaluate model 
+
+
+                    scores[dataset_name][split] = []
+                        # TODO: since there are duplicates, this should be splitting on unique indices
+                        f1s = cross_validate(clf, data[split]['text'], data[split]['hate'], scoring=['f1'], cv=2)['test_f1'].tolist()
+                        scores[dataset_name][split] += f1s
+                        # confusion_matrices[dataset] = {}
+
+                    f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
+
+                # print()
+
+                splitnames = ['with_special', 'no_special']
+                # T-test or Wilcoxon for significance
+                # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
+                sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
+                sigs.append({'dataset': dataset_name, 
+                             f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
+                             'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
+
+            print(splits)
+            f1_df = pd.DataFrame(f1_scores[splits])
+            print(f1_df)
+            print()
+            sigs_df = pd.DataFrame(sigs)
+            print(sigs_df)
+
+            # Save out CV scores
+            with open(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
+                pickle.dump(scores, f)
+            f1_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_f1.csv')
+            sigs_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_sigs.csv')
 
     def train_eval_lr(self):
         """ Train and evaluate logistic regression classifiers on splits """
