@@ -172,7 +172,7 @@ class IdentityPCA:
     def load_group_labels(self):
         """ Load group labels"""
         if self.group_labels is None:
-            path = '/storage2/mamille3/hegemonic_hate/resources/group_labels.json'
+            path = '../resources/group_labels.json'
             with open(path, 'r') as f:
                 self.group_labels = json.load(f) 
     
@@ -207,6 +207,6 @@ class IdentityPCA:
             outname = 'combined_identity_pca'
         else:
             outname = 'dataset_identity_pca'
-        outpath = f'/storage2/mamille3/hegemonic_hate/output/{outname}.png'
+        outpath = f'../output/{outname}.png'
         fig.write_image(outpath)
         print(f"Saved dataset identity PCA to {outpath}")

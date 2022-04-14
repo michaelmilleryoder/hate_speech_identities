@@ -102,7 +102,7 @@ class DatasetsLoader:
             marg.drop(closest_marg, inplace=True) 
 
         # Save control terms out
-        outpath = '/storage2/mamille3/hegemonic_hate/resources/control_identity_terms.txt'
+        outpath = '../resources/control_identity_terms.txt'
         print("Control terms:")
         with open(outpath, 'w') as f:
             for term in control_terms:

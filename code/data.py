@@ -19,7 +19,10 @@ class Dataset:
         """
         self.name = name
         self.loader = getattr(load_process_dataset, f'{self.name.capitalize()}Loader')
-        self.dirpath = os.path.join('/storage2/mamille3/data/hate_speech', name)
+        if os.path.exists('/storage2/mamille3/data/hate_speech'): # should probably be an arg instead
+            self.dirpath = os.path.join('/storage2/mamille3/data/hate_speech', name)
+        else:
+            self.dirpath = os.path.join('~/data/hate_speech', name)
         self.load_paths = load_paths
         if self.load_paths is None:
             self.load_paths = [f'{name}.csv']

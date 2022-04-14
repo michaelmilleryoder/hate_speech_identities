@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 from data import Dataset
 from split_datasets import ComparisonSplits
-from bert_classifier import BertClassifier
+from bert_classifier import BertClassifier, preprocess
 
 
 class HegComparison:
@@ -77,8 +77,9 @@ class HegComparison:
     def train_eval_cv(self, clf_name):
         """ Train classifiers and evaluate with cross-validation """
         f1_scores = {}
+        scores = {}
+
         for splits in ['hegsplits', 'controlsplits']:
-            scores = {}
             f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
             sigs = []
 
@@ -87,37 +88,40 @@ class HegComparison:
                 data = {}
                 scores[dataset_name] = {}
                 for split, df in self.comparisons.splits[dataset_name][splits].items():
+                    scores[dataset_name][split] = []
                     data[split] = df
 
                     # Check for NaNs
-                    if data[split]['text'].isnull().values.any():
-                        pdb.set_trace()
+                    #if data[split]['text'].isnull().values.any():
+                    #    pdb.set_trace()
+                    assert not data[split]['text'].isnull().values.any()
 
                     if clf_name == 'bert':
                         clf = BertClassifier()
 
-                    for _ in range(5):
+                    for _ in tqdm(range(5), desc='internal cv'):
                         # Define the fold splitter
                         kfold = GroupKFold(n_splits=2)
 
-                        for train, test in kfold(data[split]['text'], data[split]['hate'], data[split].index):
-                            # Vectorize input
+                        for train_inds, test_inds in kfold.split(data[split]['text'], data[split]['hate'], data[split].index):
+                            train = data[split].iloc[train_inds]
+                            test = data[split].iloc[test_inds]
+
+                            # Vectorize, preprocess input
+                            input_ids_train, attention_masks_train = clf.create_sentence_embeddings(
+                                    train['text'].map(preprocess))
+                            input_ids_test, attention_masks_test = clf.create_sentence_embeddings(
+                                    test['text'].map(preprocess))
 
                             # Train, evaluate model 
+                            clf.compile_fit(input_ids_train, attention_masks_train, train['hate'])
+                            fold_scores, preds = clf.predict(input_ids_test, attention_masks_test, test['hate'])
 
-
-                    scores[dataset_name][split] = []
-                        # TODO: since there are duplicates, this should be splitting on unique indices
-                        f1s = cross_validate(clf, data[split]['text'], data[split]['hate'], scoring=['f1'], cv=2)['test_f1'].tolist()
-                        scores[dataset_name][split] += f1s
-                        # confusion_matrices[dataset] = {}
-
+                    scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
                     f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
 
-                # print()
-
-                splitnames = ['with_special', 'no_special']
                 # T-test or Wilcoxon for significance
+                splitnames = ['with_special', 'no_special']
                 # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
                 sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
                 sigs.append({'dataset': dataset_name, 
@@ -132,10 +136,10 @@ class HegComparison:
             print(sigs_df)
 
             # Save out CV scores
-            with open(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
+            with open(f'../tmp/{clf_name}_{splits}_5x2cv_scores.pkl', 'wb') as f:
                 pickle.dump(scores, f)
-            f1_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_f1.csv')
-            sigs_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_sigs.csv')
+            f1_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_f1.csv')
+            sigs_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_sigs.csv')
 
     def train_eval_lr(self):
         """ Train and evaluate logistic regression classifiers on splits """
@@ -193,9 +197,9 @@ class HegComparison:
             print(sigs_df)
 
             # Save out CV scores
-            with open(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
+            with open(f'../tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
                 pickle.dump(scores, f)
-            f1_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_f1.csv')
-            sigs_df.to_csv(f'/storage2/mamille3/hegemonic_hate/tmp/{splits}_5x2cv_sigs.csv')
+            f1_df.to_csv(f'../tmp/{splits}_5x2cv_f1.csv')
+            sigs_df.to_csv(f'../tmp/{splits}_5x2cv_sigs.csv')
 
             print('************************')

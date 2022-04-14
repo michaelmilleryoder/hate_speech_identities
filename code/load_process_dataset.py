@@ -35,12 +35,12 @@ class DataLoader:
     def load_resources(self):
         """ Load resources for labeling """
         # Load group name normalization dict
-        group_norm_path = '/storage2/mamille3/hegemonic_hate/resources/normalized_groups.json'
+        group_norm_path = '../resources/normalized_groups.json'
         with open(group_norm_path, 'r') as f:
             self.groups_norm = json.load(f) 
 
         # Load group labels dict
-        group_label_path = '/storage2/mamille3/hegemonic_hate/resources/group_labels.json'
+        group_label_path = '../resources/group_labels.json'
         with open(group_label_path, 'r') as f:
             self.group_labels = json.load(f) 
 
@@ -105,7 +105,7 @@ class DataLoader:
         """ Label which instances target terms in the control set """
         ""
         # Load control group terms
-        path = '/storage2/mamille3/hegemonic_hate/resources/control_identity_terms.txt'
+        path = '../resources/control_identity_terms.txt'
         with open(path, 'r') as f:
             control_terms = f.read().splitlines()
 

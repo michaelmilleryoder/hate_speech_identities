@@ -25,18 +25,19 @@ def main():
     """ Run experiments """
 
     # Settings (could load from a config)
-    load_datasets = True # load raw or processed datasets instead of task-specific splits
+    load_datasets = False # load raw or processed datasets instead of task-specific splits
     reprocess_datasets = False
     hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
 
     # Heg comparison settings
-    run_comparison = False
+    run_comparison = True
     create_splits = False # create comparison splits
+    clf_name = 'bert'
 
     # PCA settings
-    run_pca = True
-    create_identity_datasets = True # False or list of either or both 'separate', 'combined'
-    combine_datasets = True
+    run_pca = False
+    create_identity_datasets = False # False or list of either or both 'separate', 'combined'
+    combine_datasets = False
 
     # Datasets (if I modify this much, it should come from a config file or command line argument)
     datasets = [
@@ -74,7 +75,7 @@ def main():
     # Run with-heg/no-heg comparison
     if run_comparison:
         heg_comparison = HegComparison(datasets, create_splits=create_splits, hate_ratio=hate_ratio)
-        heg_comparison.run()
+        heg_comparison.run(clf_name)
 
     # Run identity split PCA
     if run_pca:

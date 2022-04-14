@@ -141,7 +141,10 @@ class ComparisonSplits():
         """ Load heg and control dataset splits """
         for dataset_name, splits in self.splits.items():
             # Load csv
-            dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+            if os.path.exists('/storage2/mamille3/data/hate_speech'):
+                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+            else:
+                dataset_path = f'~/data/hate_speech/{dataset_name}/processed'
             for splits_name in splits:
                 for split_name in ['with_special', 'no_special']:
                     csvpath = os.path.join(dataset_path, f'{dataset_name}_{self.hate_ratio}hate_{splits_name}_{split_name}.csv')
@@ -165,10 +168,12 @@ class ComparisonSplits():
 
     def save_splits(self):
         """ Save out splits """
-
         for dataset_name, splits in self.splits.items():
             # Save out csvs
-            dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+            if os.path.exists('/storage2/mamille3/data/hate_speech'):
+                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+            else:
+                dataset_path = f'~/data/hate_speech/{dataset_name}/processed'
             if not os.path.exists(dataset_path):
                 os.makedirs(dataset_path)
             for splits_name, s in splits.items():

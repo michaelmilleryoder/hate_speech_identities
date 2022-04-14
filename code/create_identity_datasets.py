@@ -53,9 +53,9 @@ class IdentityDatasetCreator:
         self.combined_folds = {}
         self.threshold = 333 # minimum number of intances of hate to include an identity in a dataset
             # Have put 500 for separate identity dataset PCA, 333 for combined over 3 datasets (to make 1000)
-        self.folds_path = f'/storage2/mamille3/hegemonic_hate/data/identity_splits_{self.hate_ratio}hate.pkl'
+        self.folds_path = f'../data/identity_splits_{self.hate_ratio}hate.pkl'
         self.combined_path = None
-        self.expanded_path = f'/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
+        self.expanded_path = f'../tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
 
     def create_sep_datasets(self):
         """ Create and return identity datasets """
@@ -91,7 +91,7 @@ class IdentityDatasetCreator:
         """
         
         self.selected_datasets = selected_datasets
-        self.combined_path = f'/storage2/mamille3/hegemonic_hate/data/combined_identity_splits_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
+        self.combined_path = f'../data/combined_identity_splits_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
         if self.create:
             self.form_combined_datasets()
         else:
@@ -252,13 +252,13 @@ class IdentityDatasetCreator:
             self.expanded_datasets[dataset.name] = data.explode('identity_groups').rename(columns={'identity_groups': 'identity_group'})
 
         # Save out in case I want to examine it
-        outpath = '/storage2/mamille3/hegemonic_hate/tmp/expanded_datasets.pkl'
+        outpath = '../tmp/expanded_datasets.pkl'
         with open(outpath, 'wb') as f:
             pickle.dump(self.expanded_datasets, f)
 
     def load_identity_groups(self):
         """ Loads identity groupings into self.identity_groups """
-        path = '/storage2/mamille3/hegemonic_hate/resources/identity_groups.json'
+        path = '../resources/identity_groups.json'
         
         with open(path, 'r') as f:
             self.identity_groups = json.load(f)
@@ -291,7 +291,7 @@ class IdentityDatasetCreator:
         
         # Save out
         selected_dataset_groups = filtered.index.tolist()
-        outpath = '/storage2/mamille3/hegemonic_hate/tmp/selected_dataset_groups.pkl'
+        outpath = '../tmp/selected_dataset_groups.pkl'
         with open(outpath, 'wb') as f:
             pickle.dump(selected_dataset_groups, f)
 
