@@ -1,6 +1,3 @@
-import pdb
-
-import numpy as np
 import pickle
 import pdb
 
@@ -33,6 +30,7 @@ class HegComparison:
         self.datasets = datasets
         self.create_splits = create_splits
         self.hate_ratio = hate_ratio
+        self.cv_runs = 3
         self.comparisons = None
 
     def run(self, clf_name):
@@ -80,14 +78,17 @@ class HegComparison:
         scores = {}
 
         for splits in ['hegsplits', 'controlsplits']:
+            tqdm.write(splits)
             f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
             sigs = []
 
-            for dataset_name in tqdm(self.comparisons.splits):
-                tqdm.write(dataset_name)
+            for dataset_name in tqdm(self.comparisons.splits, desc='datasets', ncols=100):
+                tqdm.write(f'\t{dataset_name}')
                 data = {}
                 scores[dataset_name] = {}
+                pbar = tqdm(total=self.cv_runs*2*2, desc='\tcv runs', ncols=80)
                 for split, df in self.comparisons.splits[dataset_name][splits].items():
+                    tqdm.write(f'\t\t{split}')
                     scores[dataset_name][split] = []
                     data[split] = df
 
@@ -98,14 +99,20 @@ class HegComparison:
 
                     if clf_name == 'bert':
                         clf = BertClassifier()
-
-                    for _ in tqdm(range(5), desc='internal cv'):
+                    elif clf_name == 'lr':
+                        clf = LogisticRegressionClassifier()
+                    #for _ in tqdm(range(self.cv_runs), desc='\tcv runs', ncols=80):
+                    for _ in range(self.cv_runs):
                         # Define the fold splitter
                         kfold = GroupKFold(n_splits=2)
-
                         for train_inds, test_inds in kfold.split(data[split]['text'], data[split]['hate'], data[split].index):
                             train = data[split].iloc[train_inds]
                             test = data[split].iloc[test_inds]
+
+                            # Train and evaluate
+                            # TODO: start editing here
+                            pdb.set_trace()
+                            clf.train_eval(train, test)
 
                             # Vectorize, preprocess input
                             input_ids_train, attention_masks_train = clf.create_sentence_embeddings(
@@ -114,8 +121,10 @@ class HegComparison:
                                     test['text'].map(preprocess))
 
                             # Train, evaluate model 
-                            clf.compile_fit(input_ids_train, attention_masks_train, train['hate'])
+                            clf.build_compile_fit(input_ids_train, attention_masks_train, train['hate'])
                             fold_scores, preds = clf.predict(input_ids_test, attention_masks_test, test['hate'])
+                            
+                            pbar.update(1)
 
                     scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
                     f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
@@ -128,78 +137,78 @@ class HegComparison:
                              f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
                              'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
 
-            print(splits)
-            f1_df = pd.DataFrame(f1_scores[splits])
-            print(f1_df)
-            print()
-            sigs_df = pd.DataFrame(sigs)
-            print(sigs_df)
-
-            # Save out CV scores
-            with open(f'../tmp/{clf_name}_{splits}_5x2cv_scores.pkl', 'wb') as f:
-                pickle.dump(scores, f)
-            f1_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_f1.csv')
-            sigs_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_sigs.csv')
-
-    def train_eval_lr(self):
-        """ Train and evaluate logistic regression classifiers on splits """
-        f1_scores = {}
-        for splits in ['hegsplits', 'controlsplits']:
-            
-            scores = {}
-            f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
-            sigs = []
-
-            for dataset_name in tqdm(self.comparisons.splits):
-                tqdm.write(dataset_name)
-
-                vectorizer = {}
-                data = {}
-                bow = {}
-                scores[dataset_name] = {}
-                for split, df in self.comparisons.splits[dataset_name][splits].items():
-                    data[split] = df
-
-                    # Check for NaNs
-                    if data[split]['text'].isnull().values.any():
-                        pdb.set_trace()
-
-                    # Build feature extractor
-                    vectorizer[split] = TfidfVectorizer(min_df=1)
-
-                    # Train, evaluate LR model 
-                    clf = make_pipeline(vectorizer[split], LogisticRegression(solver='liblinear'))
-
-                    scores[dataset_name][split] = []
-                    for _ in range(5):
-                        # TODO: since there are duplicates, this should be splitting on unique indices
-                        f1s = cross_validate(clf, data[split]['text'], data[split]['hate'], scoring=['f1'], cv=2)['test_f1'].tolist()
-                        scores[dataset_name][split] += f1s
-                        # confusion_matrices[dataset] = {}
-
-                    f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
-
-                # print()
-
-                splitnames = ['with_special', 'no_special']
-                # T-test or Wilcoxon for significance
-                # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
-                sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
-                sigs.append({'dataset': dataset_name, 
-                             f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
-                             'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
+                # Save out CV scores (do after finishing every dataset)
+                f1_df = pd.DataFrame(f1_scores[splits])
+                sigs_df = pd.DataFrame(sigs)
+                with open(f'../tmp/{clf_name}_{splits}_5x2cv_scores.pkl', 'wb') as f:
+                    pickle.dump(scores, f)
+                f1_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_f1.csv')
+                sigs_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_sigs.csv')
 
             print(splits)
-            f1_df = pd.DataFrame(f1_scores[splits])
             print(f1_df)
-            print()
-            sigs_df = pd.DataFrame(sigs)
             print(sigs_df)
 
-            # Save out CV scores
-            with open(f'../tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
-                pickle.dump(scores, f)
-            f1_df.to_csv(f'../tmp/{splits}_5x2cv_f1.csv')
-            sigs_df.to_csv(f'../tmp/{splits}_5x2cv_sigs.csv')
+    #def train_eval_lr(self):
+    #    """ Train and evaluate logistic regression classifiers on splits 
+    #        TODO: OLD, remove this is I can get LR to run in train_eval_cv. But it's a good example of make_pipeline
+    #    """
+    #    f1_scores = {}
+    #    for splits in ['hegsplits', 'controlsplits']:
+    #        
+    #        scores = {}
+    #        f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
+    #        sigs = []
 
-            print('************************')
+    #        for dataset_name in tqdm(self.comparisons.splits):
+    #            tqdm.write(dataset_name)
+
+    #            vectorizer = {}
+    #            data = {}
+    #            bow = {}
+    #            scores[dataset_name] = {}
+    #            for split, df in self.comparisons.splits[dataset_name][splits].items():
+    #                data[split] = df
+
+    #                # Check for NaNs
+    #                if data[split]['text'].isnull().values.any():
+    #                    pdb.set_trace()
+
+    #                # Build feature extractor
+    #                vectorizer[split] = TfidfVectorizer(min_df=1)
+
+    #                # Train, evaluate LR model 
+    #                clf = make_pipeline(vectorizer[split], LogisticRegression(solver='liblinear'))
+
+    #                scores[dataset_name][split] = []
+    #                for _ in range(self.cv_runs):
+    #                    # TODO: since there are duplicates, this should be splitting on unique indices
+    #                    f1s = cross_validate(clf, data[split]['text'], data[split]['hate'], scoring=['f1'], cv=2)['test_f1'].tolist()
+    #                    scores[dataset_name][split] += f1s
+    #                    # confusion_matrices[dataset] = {}
+
+    #                f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
+
+
+    #            splitnames = ['with_special', 'no_special']
+    #            # T-test or Wilcoxon for significance
+    #            # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
+    #            sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
+    #            sigs.append({'dataset': dataset_name, 
+    #                         f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
+    #                         'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
+
+    #        print(splits)
+    #        f1_df = pd.DataFrame(f1_scores[splits])
+    #        print(f1_df)
+    #        print()
+    #        sigs_df = pd.DataFrame(sigs)
+    #        print(sigs_df)
+
+    #        # Save out CV scores
+    #        with open(f'../tmp/{splits}_5x2cv_scores.pkl', 'wb') as f:
+    #            pickle.dump(scores, f)
+    #        f1_df.to_csv(f'../tmp/{splits}_5x2cv_f1.csv')
+    #        sigs_df.to_csv(f'../tmp/{splits}_5x2cv_sigs.csv')
+
+    #        print('************************')

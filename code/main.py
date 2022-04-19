@@ -9,6 +9,8 @@
             3.3 Estimate and save out a PCA plot
 """
 
+import yaml
+import argparse
 import pdb
 
 import numpy as np
@@ -24,63 +26,30 @@ from identity_pca import IdentityPCA
 def main():
     """ Run experiments """
 
-    # Settings (could load from a config)
-    load_datasets = False # load raw or processed datasets instead of task-specific splits
-    reprocess_datasets = False
-    hate_ratio = 0.3 # hate/non-hate ratio to sample each dataset
-
-    # Heg comparison settings
-    run_comparison = True
-    create_splits = False # create comparison splits
-    clf_name = 'bert'
-
-    # PCA settings
-    run_pca = False
-    create_identity_datasets = False # False or list of either or both 'separate', 'combined'
-    combine_datasets = False
-
-    # Datasets (if I modify this much, it should come from a config file or command line argument)
-    datasets = [
-        Dataset('kennedy2020', 
-            load_paths=['ucberkeley-dlab/measuring-hate-speech','binary']),
-        Dataset('elsherief2021', 
-            load_paths=[
-            'implicit_hate_v1_stg3_posts.tsv',        
-            'implicit_hate_v1_stg1_posts.tsv',
-            ],
-        ),
-        Dataset('salminen2018'),
-        Dataset('sbic',
-             load_paths=[
-            'SBIC.v2.agg.trn.csv',
-            'SBIC.v2.agg.dev.csv',
-            'SBIC.v2.agg.tst.csv',
-        ]),
-        Dataset('cad', 
-            load_paths=['cad_v1_1.tsv']),
-        Dataset('hatexplain',
-            load_paths=['Data/dataset.json'],
-        ),
-        Dataset('civilcomments',
-            load_paths=['all_data.csv'],
-        )
-    ]
+    # Load settings from config file
+    parser = argparse.ArgumentParser()
+    parser.add_argument('config_filepath', nargs='?', type=str, help='file path to config file')
+    args = parser.parse_args()
+    with open(args.config_filepath, 'r') as f:
+        config = yaml.safe_load(f)
 
     # Load/process datasets
-    if load_datasets:
+    datasets = [Dataset(name, load_paths=opts) for name, opts in config['datasets'].items()]
+    if config['load_datasets']:
         print("Loading datasets...")
         loader = DatasetsLoader(datasets)
-        loader.load_datasets(reprocess=reprocess_datasets)
+        loader.load_datasets(reprocess=config['reprocess_datasets'])
 
     # Run with-heg/no-heg comparison
-    if run_comparison:
-        heg_comparison = HegComparison(datasets, create_splits=create_splits, hate_ratio=hate_ratio)
-        heg_comparison.run(clf_name)
+    if config['heg_comparison']['run']:
+        heg_comparison = HegComparison(datasets, 
+            create_splits=config['heg_comparison']['create_splits'], hate_ratio=config['hate_ratio'])
+        heg_comparison.run(config['clf_name'])
 
     # Run identity split PCA
-    if run_pca:
-        identity_pca = IdentityPCA(datasets, create_datasets=create_identity_datasets, 
-            hate_ratio=hate_ratio, combine=combine_datasets)
+    if config['pca']['run']:
+        identity_pca = IdentityPCA(datasets, create_datasets=config['pca']['create_identity_datasets'], 
+            hate_ratio=config['hate_ratio'], combine=config['pca']['combine_datasets'])
         identity_pca.run()
 
 

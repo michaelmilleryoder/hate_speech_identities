@@ -1,0 +1,34 @@
+---
+load_datasets: False # load raw or processed datasets instead of task-specific splits
+reprocess_datasets: False # hate/non-hate ratio to sample each dataset
+hate_ratio: 0.3
+clf_name: 'bert'
+
+heg_comparison:
+  run: True
+  create_splits: False # create comparison splits
+  cv_runs: 2
+
+pca:
+  run: False
+  create_identity_datasets: False # False or list of either or both 'separate', 'combined'
+  combine_datasets: False
+
+datasets:
+  kennedy2020:
+    - ucberkeley-dlab/measuring-hate-speech
+    - binary
+  elsherief2021:
+    - implicit_hate_v1_stg3_posts.tsv        
+    - implicit_hate_v1_stg1_posts.tsv
+  salminen2018: []
+  sbic:
+    - SBIC.v2.agg.trn.csv
+    - SBIC.v2.agg.dev.csv
+    - SBIC.v2.agg.tst.csv
+  cad:
+    - cad_v1_1.tsv
+  hatexplain:
+    - Data/dataset.json
+  civilcomments:
+    - all_data.csv
