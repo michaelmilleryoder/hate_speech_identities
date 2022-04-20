@@ -90,6 +90,20 @@ class BertClassifier:
         attention_masks=np.array(attention_masks)
         return input_ids, attention_masks
 
+    def train_eval(self, train, test):
+        """ Train and evaluate on train and test dataframes """
+
+        # Vectorize, preprocess input
+        input_ids_train, attention_masks_train = self.create_sentence_embeddings(
+                train['text'].map(preprocess))
+        input_ids_test, attention_masks_test = self.create_sentence_embeddings(
+                test['text'].map(preprocess))
+
+        # Train, evaluate model 
+        self.build_compile_fit(input_ids_train, attention_masks_train, train['hate'])
+        fold_scores, preds = self.predict(input_ids_test, attention_masks_test, test['hate'])
+        return fold_scores, preds                 
+
     def build_compile_fit(self, input_ids, attention_masks, labels):
         """ Specify, compile and fit the model """
         # TODO: make build a separate function

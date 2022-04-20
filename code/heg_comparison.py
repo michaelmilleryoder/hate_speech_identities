@@ -1,11 +1,8 @@
 import pickle
 import pdb
 
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.pipeline import make_pipeline
-from sklearn.linear_model import LogisticRegression
 from sklearn.model_selection import cross_validate, GroupKFold
-from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.metrics import classification_report
 import pandas as pd
 import numpy as np
 from scipy.stats import chisquare, ttest_rel, wilcoxon
@@ -13,7 +10,8 @@ from tqdm import tqdm
 
 from data import Dataset
 from split_datasets import ComparisonSplits
-from bert_classifier import BertClassifier, preprocess
+from bert_classifier import BertClassifier
+from lr_classifier import LogisticRegressionClassifier
 
 
 class HegComparison:
@@ -23,14 +21,15 @@ class HegComparison:
             Run logistic regression classifiers on these splits, save out results
     """
 
-    def __init__(self, datasets, create_splits: bool = False, hate_ratio: float = 0.3):
+    def __init__(self, datasets, create_splits: bool = False, hate_ratio: float = 0.3, 
+            cv_runs: int = 5):
         """ Args:
                 create_splits: whether to recreate splits. If False, will just load them
         """
         self.datasets = datasets
         self.create_splits = create_splits
         self.hate_ratio = hate_ratio
-        self.cv_runs = 3
+        self.cv_runs = cv_runs
         self.comparisons = None
 
     def run(self, clf_name):
@@ -110,20 +109,7 @@ class HegComparison:
                             test = data[split].iloc[test_inds]
 
                             # Train and evaluate
-                            # TODO: start editing here
-                            pdb.set_trace()
-                            clf.train_eval(train, test)
-
-                            # Vectorize, preprocess input
-                            input_ids_train, attention_masks_train = clf.create_sentence_embeddings(
-                                    train['text'].map(preprocess))
-                            input_ids_test, attention_masks_test = clf.create_sentence_embeddings(
-                                    test['text'].map(preprocess))
-
-                            # Train, evaluate model 
-                            clf.build_compile_fit(input_ids_train, attention_masks_train, train['hate'])
-                            fold_scores, preds = clf.predict(input_ids_test, attention_masks_test, test['hate'])
-                            
+                            fold_scores, preds = clf.train_eval(train, test)
                             pbar.update(1)
 
                     scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])

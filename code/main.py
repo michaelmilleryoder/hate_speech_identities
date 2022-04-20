@@ -43,7 +43,10 @@ def main():
     # Run with-heg/no-heg comparison
     if config['heg_comparison']['run']:
         heg_comparison = HegComparison(datasets, 
-            create_splits=config['heg_comparison']['create_splits'], hate_ratio=config['hate_ratio'])
+            create_splits=config['heg_comparison']['create_splits'], 
+            hate_ratio=config['hate_ratio'],
+            cv_runs=config['heg_comparison']['cv_runs'],
+        )
         heg_comparison.run(config['clf_name'])
 
     # Run identity split PCA
