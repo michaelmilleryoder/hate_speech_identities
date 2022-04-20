@@ -47,7 +47,7 @@ def main():
             hate_ratio=config['hate_ratio'],
             cv_runs=config['heg_comparison']['cv_runs'],
         )
-        heg_comparison.run(config['clf_name'])
+        heg_comparison.run(config['classifier']['name'], config['classifier']['settings'])
 
     # Run identity split PCA
     if config['pca']['run']:

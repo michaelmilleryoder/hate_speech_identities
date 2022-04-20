@@ -4,6 +4,7 @@
 """
 import re
 import warnings
+import pdb
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 
@@ -41,8 +42,11 @@ def preprocess(text):
 class BertClassifier:
     """ BERT hate speech classifier """
 
-    def __init__(self):
+    def __init__(self, n_gpus=1):
         """ Initialize classifier """
+        #self.n_gpus = self.strategy.num_replicas_in_sync
+        self.n_gpus = int(n_gpus)
+        tf.keras.backend.clear_session()
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         self.callbacks = [
                 #tf.keras.callbacks.ModelCheckpoint(
@@ -52,15 +56,19 @@ class BertClassifier:
         self.epochs = 20
         #self.strategy = tf.distribute.MirroredStrategy() # for multiple GPUs
         #self.strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-        self.strategy = tf.distribute.MultiWorkerMirroredStrategy()
-        self.n_gpus = self.strategy.num_replicas_in_sync
-        self.batch_size_per_replica = 32
-        self.batch_size = self.batch_size_per_replica * self.n_gpus
-        #tqdm.write(f"Strategy uses {self.strategy.num_replicas_in_sync} GPUs")
-        with self.strategy.scope():
+        if self.n_gpus > 1:
+            self.strategy = tf.distribute.MultiWorkerMirroredStrategy()
+            with self.strategy.scope():
+                self.loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+                self.metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
+                self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-6, epsilon=1e-8) #5e-7, 5e-9 previous settings
+        else:
             self.loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
             self.metric = tf.keras.metrics.SparseCategoricalAccuracy('accuracy')
             self.optimizer = tf.keras.optimizers.Adam(learning_rate=1e-6, epsilon=1e-8) #5e-7, 5e-9 previous settings
+        self.batch_size_per_replica = 32
+        self.batch_size = self.batch_size_per_replica * self.n_gpus
+        #tqdm.write(f"Strategy uses {self.strategy.num_replicas_in_sync} GPUs")
         self.model = None
 
     def create_sentence_embeddings(self, sentences):
@@ -104,12 +112,19 @@ class BertClassifier:
         fold_scores, preds = self.predict(input_ids_test, attention_masks_test, test['hate'])
         return fold_scores, preds                 
 
-    def build_compile_fit(self, input_ids, attention_masks, labels):
-        """ Specify, compile and fit the model """
-        # TODO: make build a separate function
-        with self.strategy.scope():
+    def build_model(self):
+        """ Define a model """
+        if self.n_gpus > 1:
+            with self.strategy.scope():
+                self.model = TFBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=2)
+                self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=[self.metric])
+        else:
             self.model = TFBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=2)
             self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=[self.metric])
+
+    def build_compile_fit(self, input_ids, attention_masks, labels):
+        """ Specify, compile and fit the model """
+        self.build_model()
 
         # Wrap data to tf Dataset
         #train = tf.data.Dataset.from_tensor_slices(([input_ids, attention_masks], labels))
@@ -129,6 +144,8 @@ class BertClassifier:
             self.model.fit([input_ids, attention_masks], labels, batch_size=self.batch_size, 
                 epochs=self.epochs, 
                 callbacks=self.callbacks, verbose=0)
+        tf.keras.backend.clear_session()
+        K.clear_session()
         #self.model.fit([input_ids, attention_masks], labels, batch_size=32, epochs=self.epochs, 
         #    callbacks=self.callbacks, validation_data=([input_ids_val, attention_masks_val], labels_val))
 

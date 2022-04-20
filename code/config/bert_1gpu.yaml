@@ -2,14 +2,15 @@
 load_datasets: False # load raw or processed datasets instead of task-specific splits
 reprocess_datasets: False # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
-classifier: 
-  name: 'lr'
-  settings: {}
+classifier:
+  name: 'bert'
+  settings:
+    n_gpus: 1
 
 heg_comparison:
   run: True
   create_splits: False # create comparison splits
-  cv_runs: 5
+  cv_runs: 2
 
 pca:
   run: False

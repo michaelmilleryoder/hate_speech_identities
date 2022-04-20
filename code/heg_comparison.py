@@ -1,7 +1,7 @@
 import pickle
 import pdb
 
-from sklearn.model_selection import cross_validate, GroupKFold
+from sklearn.model_selection import cross_validate, GroupShuffleSplit
 from sklearn.metrics import classification_report
 import pandas as pd
 import numpy as np
@@ -32,10 +32,11 @@ class HegComparison:
         self.cv_runs = cv_runs
         self.comparisons = None
 
-    def run(self, clf_name):
+    def run(self, clf_name, clf_settings):
         """ Run experiment 
         Args:
             clf_name: One of {'bert', 'lr'}
+            clf_settings: a dictionary of settings
         """
 
         # Create dataset splits for heg/no-heg comparison with control/no-control
@@ -46,7 +47,7 @@ class HegComparison:
 
         # Train and evaluate LR classifier on dataset splits (heg/no-heg vs control/no-control)
         print(f"Training and evaluating {clf_name} classifiers on splits...")
-        self.train_eval_cv(clf_name)
+        self.train_eval_cv(clf_name, clf_settings)
         #self.train_eval_lr()
 
     def create_dataset_splits(self):
@@ -71,7 +72,7 @@ class HegComparison:
             print(f'# control: {n_control}')
             print()
 
-    def train_eval_cv(self, clf_name):
+    def train_eval_cv(self, clf_name, clf_settings):
         """ Train classifiers and evaluate with cross-validation """
         f1_scores = {}
         scores = {}
@@ -92,18 +93,16 @@ class HegComparison:
                     data[split] = df
 
                     # Check for NaNs
-                    #if data[split]['text'].isnull().values.any():
-                    #    pdb.set_trace()
                     assert not data[split]['text'].isnull().values.any()
 
+                    # Build classifier
                     if clf_name == 'bert':
-                        clf = BertClassifier()
+                        clf = BertClassifier(**clf_settings)
                     elif clf_name == 'lr':
                         clf = LogisticRegressionClassifier()
-                    #for _ in tqdm(range(self.cv_runs), desc='\tcv runs', ncols=80):
                     for _ in range(self.cv_runs):
                         # Define the fold splitter
-                        kfold = GroupKFold(n_splits=2)
+                        kfold = GroupShuffleSplit(n_splits=2, test_size=0.4)
                         for train_inds, test_inds in kfold.split(data[split]['text'], data[split]['hate'], data[split].index):
                             train = data[split].iloc[train_inds]
                             test = data[split].iloc[test_inds]
@@ -111,8 +110,8 @@ class HegComparison:
                             # Train and evaluate
                             fold_scores, preds = clf.train_eval(train, test)
                             pbar.update(1)
+                            scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
 
-                    scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
                     f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
 
                 # T-test or Wilcoxon for significance
@@ -128,8 +127,8 @@ class HegComparison:
                 sigs_df = pd.DataFrame(sigs)
                 with open(f'../tmp/{clf_name}_{splits}_5x2cv_scores.pkl', 'wb') as f:
                     pickle.dump(scores, f)
-                f1_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_f1.csv')
-                sigs_df.to_csv(f'../output/{clf_name}_{splits}_5x2cv_sigs.csv')
+                f1_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_f1.csv')
+                sigs_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_sigs.csv', index=False)
 
             print(splits)
             print(f1_df)
