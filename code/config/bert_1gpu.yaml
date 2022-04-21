@@ -6,6 +6,7 @@ classifier:
   name: 'bert'
   settings:
     n_gpus: 1
+    gpu_ids: [1] # list of ids or 'all'
 
 heg_comparison:
   run: True

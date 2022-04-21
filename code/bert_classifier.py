@@ -42,10 +42,12 @@ def preprocess(text):
 class BertClassifier:
     """ BERT hate speech classifier """
 
-    def __init__(self, n_gpus=1):
+    def __init__(self, n_gpus=1, gpu_ids='all'):
         """ Initialize classifier """
         #self.n_gpus = self.strategy.num_replicas_in_sync
         self.n_gpus = int(n_gpus)
+        if gpu_ids != 'all':
+            os.environ['CUDA_VISIBLE_DEVICES'] = ','.join([str(gid) for gid in gpu_ids])
         tf.keras.backend.clear_session()
         self.tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         self.callbacks = [

@@ -1,7 +1,7 @@
 import pickle
 import pdb
 
-from sklearn.model_selection import cross_validate, GroupShuffleSplit
+from sklearn.model_selection import cross_validate, GroupShuffleSplit, GroupKFold
 from sklearn.metrics import classification_report
 import pandas as pd
 import numpy as np
@@ -100,17 +100,26 @@ class HegComparison:
                         clf = BertClassifier(**clf_settings)
                     elif clf_name == 'lr':
                         clf = LogisticRegressionClassifier()
-                    for _ in range(self.cv_runs):
-                        # Define the fold splitter
-                        kfold = GroupShuffleSplit(n_splits=2, test_size=0.4)
-                        for train_inds, test_inds in kfold.split(data[split]['text'], data[split]['hate'], data[split].index):
-                            train = data[split].iloc[train_inds]
-                            test = data[split].iloc[test_inds]
+                    #for _ in range(self.cv_runs):
+                    # Define the fold splitter
+                    splitter = GroupShuffleSplit(n_splits=self.cv_runs, test_size=0.5)
+                    for train_inds, test_inds in splitter.split(data[split]['text'], data[split]['hate'], data[split].index):
+                        train = data[split].iloc[train_inds]
+                        test = data[split].iloc[test_inds]
 
-                            # Train and evaluate
-                            fold_scores, preds = clf.train_eval(train, test)
-                            pbar.update(1)
-                            scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
+                        # Train and evaluate
+                        fold_scores, preds = clf.train_eval(train, test)
+                        pbar.update(1)
+                        scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
+
+                        # Then switch train/test for cross validation
+                        train = data[split].iloc[test_inds]
+                        test = data[split].iloc[train_inds]
+
+                        # Train and evaluate
+                        fold_scores, preds = clf.train_eval(train, test)
+                        pbar.update(1)
+                        scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
 
                     f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
 
