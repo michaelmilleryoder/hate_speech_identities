@@ -77,23 +77,23 @@ class HegComparison:
         f1_scores = {}
         scores = {}
 
-        for splits in ['hegsplits', 'controlsplits']:
-            tqdm.write(splits)
-            f1_scores[splits] = [] # List of dicts with keys: dataset, split, f1 (to create df)
+        for dataset_name in tqdm(self.comparisons.splits, desc='datasets', ncols=100):
+            tqdm.write(f'{dataset_name}')
+            scores[dataset_name] = {}
+            f1_scores = [] # List of dicts with keys: dataset, split, f1 (to create df)
             sigs = []
+            pbar = tqdm(total=self.cv_runs*2*2, desc='\tcv runs', ncols=80)
 
-            for dataset_name in tqdm(self.comparisons.splits, desc='datasets', ncols=100):
-                tqdm.write(f'\t{dataset_name}')
-                data = {}
-                scores[dataset_name] = {}
-                pbar = tqdm(total=self.cv_runs*2*2, desc='\tcv runs', ncols=80)
-                for split, df in self.comparisons.splits[dataset_name][splits].items():
+            for splits in ['hegsplits', 'controlsplits']:
+                tqdm.write(f'\t{splits}')
+                scores[dataset_name][splits] = {}
+
+                for split, data in self.comparisons.splits[dataset_name][splits].items():
                     tqdm.write(f'\t\t{split}')
                     scores[dataset_name][split] = []
-                    data[split] = df
 
                     # Check for NaNs
-                    assert not data[split]['text'].isnull().values.any()
+                    assert not data['text'].isnull().values.any()
 
                     # Build classifier
                     if clf_name == 'bert':
@@ -103,45 +103,36 @@ class HegComparison:
                     #for _ in range(self.cv_runs):
                     # Define the fold splitter
                     splitter = GroupShuffleSplit(n_splits=self.cv_runs, test_size=0.5)
-                    for train_inds, test_inds in splitter.split(data[split]['text'], data[split]['hate'], data[split].index):
-                        train = data[split].iloc[train_inds]
-                        test = data[split].iloc[test_inds]
+                    for inds0, inds1 in splitter.split(data, groups=data.index):
+                        for setup in [(inds0, inds1), (inds1, inds0)]:
+                            train = data.iloc[setup[0]]
+                            test = data.iloc[setup[1]]
 
                         # Train and evaluate
                         fold_scores, preds = clf.train_eval(train, test)
                         pbar.update(1)
-                        scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
+                        scores[dataset_name][splits][split].append(fold_scores.loc['f1-score', 'True'])
 
-                        # Then switch train/test for cross validation
-                        train = data[split].iloc[test_inds]
-                        test = data[split].iloc[train_inds]
+                    f1_scores.append({'dataset': dataset_name, 'splits': splits, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
 
-                        # Train and evaluate
-                        fold_scores, preds = clf.train_eval(train, test)
-                        pbar.update(1)
-                        scores[dataset_name][split].append(fold_scores.loc['f1-score', 'True'])
+            # T-test or Wilcoxon for significance
+            splitnames = ['with_special', 'no_special']
+            # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
+            sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
+            sigs.append({'dataset': dataset_name, 
+                         f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
+                         'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
 
-                    f1_scores[splits].append({'dataset': dataset_name, 'split': split, 'f1': np.mean(scores[dataset_name][split])})
+            # Save out CV scores (do after finishing every dataset)
+            f1_df = pd.DataFrame(f1_scores)
+            sigs_df = pd.DataFrame(sigs)
+            with open(f'../tmp/{clf_name}_{self.cv_runs}x2cv_scores.pkl', 'wb') as f:
+                pickle.dump(scores, f)
+            f1_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_f1.csv')
+            sigs_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_sigs.csv', index=False)
 
-                # T-test or Wilcoxon for significance
-                splitnames = ['with_special', 'no_special']
-                # sig = wilcoxon(scores[dataset][splitnames[0]], scores[dataset][splitnames[1]])
-                sig = ttest_rel(scores[dataset_name][splitnames[0]], scores[dataset_name][splitnames[1]])
-                sigs.append({'dataset': dataset_name, 
-                             f'{splitnames[1]} > {splitnames[0]}': np.mean(scores[dataset_name][splitnames[1]]) > np.mean(scores[dataset_name][splitnames[0]]), 
-                             'p < 0.05': sig.pvalue < 0.05, 'pvalue': sig.pvalue, 'statistic': sig.statistic,})
-
-                # Save out CV scores (do after finishing every dataset)
-                f1_df = pd.DataFrame(f1_scores[splits])
-                sigs_df = pd.DataFrame(sigs)
-                with open(f'../tmp/{clf_name}_{splits}_5x2cv_scores.pkl', 'wb') as f:
-                    pickle.dump(scores, f)
-                f1_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_f1.csv')
-                sigs_df.to_csv(f'../output/{clf_name}_{splits}_{self.cv_runs}x2cv_sigs.csv', index=False)
-
-            print(splits)
-            print(f1_df)
-            print(sigs_df)
+            tqdm.write(f1_df)
+            tqdm.write(sigs_df)
 
     #def train_eval_lr(self):
     #    """ Train and evaluate logistic regression classifiers on splits 
