@@ -56,7 +56,7 @@ class BertClassifier:
         self.callbacks = [
                 #tf.keras.callbacks.ModelCheckpoint(
                 #            filepath='../models/output',save_weights_only=True, monitor='val_loss', mode='min',save_best_only=True),
-                tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1)
+                tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=0)
                         ]
         self.epochs = 50 # maximum number of epochs to train
         #self.strategy = tf.distribute.MirroredStrategy() # for multiple GPUs
