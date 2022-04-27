@@ -136,7 +136,7 @@ class HegComparison:
             with open(f'../tmp/{clf_name}_{self.cv_runs}x2cv_scores.pkl', 'wb') as f:
                 pickle.dump(scores, f)
             f1_df.to_csv(f'../output/{clf_name}_{self.cv_runs}x2cv_f1.csv')
-            sigs_df.to_csv(f'../output/{clf_name}_{self.cv_runs}x2cv_sigs.csv', index=False)
+            sigs_df.to_csv(f'../output/{clf_name}_{self.cv_runs}x2cv_sigs.csv')
 
             print(f1_df)
             print(sigs_df)
