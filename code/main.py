@@ -51,8 +51,11 @@ def main():
 
     # Run identity split PCA
     if config['pca']['run']:
-        identity_pca = IdentityPCA(datasets, create_datasets=config['pca']['create_identity_datasets'], 
-            hate_ratio=config['hate_ratio'], combine=config['pca']['combine_datasets'])
+        identity_pca = IdentityPCA(datasets, config['classifier']['name'], config['classifier']['settings'],
+            create_datasets=config['pca']['create_identity_datasets'], 
+            hate_ratio=config['hate_ratio'], 
+            combine=config['pca']['combine_datasets'],
+            incremental=config['pca']['incremental'])
         identity_pca.run()
 
 

@@ -14,21 +14,31 @@ from tqdm import tqdm
 import plotly.express as px
 
 from create_identity_datasets import IdentityDatasetCreator
+from bert_classifier import BertClassifier
+from lr_classifier import LogisticRegressionClassifier
 
 
 class IdentityPCA:
 
-    def __init__(self, processed_datasets, combine: bool = False, create_datasets = False, 
-            hate_ratio: float = 0.3):
+    def __init__(self, processed_datasets, clf_name, clf_settings, combine: bool = False, 
+            create_datasets = False, 
+            hate_ratio: float = 0.3, 
+            incremental: bool = False):
         """ Args:
+                clf_name: {bert, lr}
+                clf_settings: dictionary of settings for the classifier
                 create_datasets: whether to recreate both separate and combined datasets. 
                     If False, will just load them
                 combine: whether to combine identity datasets across dataset sources
+                incremental: whether to calculate PCA and save out results incrementally
         """
         self.processed_datasets = processed_datasets
+        self.clf_name = clf_name
+        self.clf_settings = clf_settings
         self.combine = combine
         self.create_datasets = create_datasets # False or list of either or both 'separate', 'combined'
         self.hate_ratio = hate_ratio
+        self.incremental = incremental
         self.sep_identity_datasets = None # separate identity datasets
         self.expanded_datasets = None
         self.combined_identity_datasets = None
@@ -39,7 +49,7 @@ class IdentityPCA:
 
     def run(self):
         """ Main function to run PCA """
-        # Create identity datasets for heg/no-heg comparison with control/no-control
+        # Create or load identity-labeled datasets
         self.load_sep_identity_datasets()
 
         # Test viability of combining identity datasets
@@ -52,10 +62,8 @@ class IdentityPCA:
                 pdb.set_trace()
             self.load_combined_identity_datasets(selected_datasets)
 
-        # Run LR cross-dataset predictions
-        self.train_eval_lr()
-    
-        # Run, save out PCA
+        # Run cross-dataset predictions and run PCA
+        self.cross_dataset_eval()
         self.run_pca()
 
     def test_combined(self):
@@ -125,9 +133,9 @@ class IdentityPCA:
         print("Creating/loading combined identity datasets...")
         self.combined_identity_datasets = self.ic.create_combined_datasets(selected_datasets)
 
-    def train_eval_lr(self):
-        """ Run logistic regression cross-dataset predictions, save to self.scores """
-        clfs = {}
+    def cross_dataset_eval(self):
+        """ Run cross-dataset predictions, save to self.scores """
+        print("Cross-dataset training and evaluation...")
         scores = []
 
         if self.combine:
@@ -135,39 +143,45 @@ class IdentityPCA:
         else:
             datasets = self.sep_identity_datasets
     
-        for name, folds in tqdm(datasets.items()):
+        for name, folds in tqdm(datasets.items(), ncols=100):
             tqdm.write(str(name))
             
-            # Extract features
-            #tqdm.write('Extracting features...')
-            bow = {}
+            # Build classifier
+            if self.clf_name == 'bert':
+                clf = BertClassifier(**self.clf_settings)
+            elif self.clf_name == 'lr':
+                clf = LogisticRegressionClassifier()
+
             # Check for NaNs
             if folds['train']['text'].isnull().values.any():
                 pdb.set_trace()
             if folds['test']['text'].isnull().values.any():
                 pdb.set_trace()
-            vectorizer = TfidfVectorizer(min_df=1)
-            vectorizer.fit(folds['train']['text']) # corpus is a list of strings (documents)
-            bow = {}
-            bow['train'] = vectorizer.transform(folds['train']['text'])
-            bow['test'] = vectorizer.transform(folds['test']['text'])
-            bow.keys()
 
-            # Train LR model 
-            #tqdm.write('Training and evaluating model...')
-            clfs[name] = LogisticRegression(solver='liblinear')
-            clfs[name].fit(bow['train'], folds['train']['hate'])
+            # Train model 
+            clf.train(folds['train'])
 
             # Evaluate
-            score_line = {'train_dataset': name}
+            score_line = {'train_dataset': name} # a row for each test dataset
             
             for test_name, test_folds in datasets.items():
-                test_bow = vectorizer.transform(test_folds['test']['text'])
-                preds = clfs[name].predict(test_bow)
-                score_line[test_name] = f1_score(test_folds['test']['hate'], preds)
+                test_scores, preds = clf.eval(test_folds['test'])
+                score_line[test_name] = test_scores.loc['f1-score', 'True']
             scores.append(score_line)
+
+            # Save out scores, run PCA incrementally
+            if self.incremental:
+                self.scores = pd.DataFrame(scores).set_index('train_dataset')
+                if self.combine:
+                    scores_outpath = f'../output/combined_identity_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
+                    self.scores.to_csv(scores_outpath)
+                    tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
+                self.run_pca()
                 
         self.scores = pd.DataFrame(scores).set_index('train_dataset')
+        scores_outpath = f'../output/combined_identity_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
+        self.scores.to_csv(scores_outpath)
+        tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
 
     def load_group_labels(self):
         """ Load group labels"""

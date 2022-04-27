@@ -2,9 +2,11 @@
 load_datasets: False # load raw or processed datasets instead of task-specific splits
 reprocess_datasets: False # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
-classifier: 
-  name: 'lr'
-  settings: {}
+classifier:
+  name: 'bert'
+  settings:
+    n_gpus: 1
+    gpu_ids: [0] # list of ids or 'all'
 
 heg_comparison:
   run: False
@@ -15,7 +17,7 @@ pca:
   run: True
   create_identity_datasets: False # False or list of either or both 'separate', 'combined'
   combine_datasets: True
-  incremental: False
+  incremental: True
 
 datasets:
   elsherief2021:

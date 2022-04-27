@@ -103,9 +103,8 @@ class BertClassifier:
         attention_masks=np.array(attention_masks)
         return input_ids, attention_masks
 
-    def train_eval(self, orig_train, test):
-        """ Train and evaluate on train and test dataframes """
-
+    def train(self, orig_train):
+        """ Train classifier """
         # Get a dev set as 10% of train
         splitter = GroupShuffleSplit(n_splits=1, test_size=0.1)
         for train_inds, dev_inds in splitter.split(orig_train, groups=orig_train.index):
@@ -117,14 +116,16 @@ class BertClassifier:
                 train['text'].map(preprocess))
         input_ids_dev, attention_masks_dev = self.create_sentence_embeddings(
                 dev['text'].map(preprocess))
-        input_ids_test, attention_masks_test = self.create_sentence_embeddings(
-                test['text'].map(preprocess))
 
-        # Train, evaluate model 
+        # Build, train model 
         self.build_compile_fit(input_ids_train, attention_masks_train, train['hate'], 
                 input_ids_dev, attention_masks_dev, dev['hate'])
-        fold_scores, preds = self.predict(input_ids_test, attention_masks_test, test['hate'])
-        return fold_scores, preds                 
+
+    def train_eval(self, train, test):
+        """ Train and evaluate on train and test dataframes """
+        self.train(train)
+        scores, preds = self.eval(test)
+        return scores, preds                 
 
     def build_model(self):
         """ Define a model """
@@ -164,10 +165,12 @@ class BertClassifier:
         tf.keras.backend.clear_session()
         K.clear_session()
 
-    def predict(self, input_ids, attention_masks, gold):
-        """ Make predictions on test data 
+    def eval(self, test):
+        """ Evaluate classifier on test data 
             Returns predictions and a classification report dataframe
         """
+        input_ids, attention_masks= self.create_sentence_embeddings(
+                test['text'].map(preprocess))
         preds = self.model.predict([input_ids, attention_masks],batch_size=32)['logits'].argmax(axis=1)
-        scores = pd.DataFrame(classification_report(gold, preds, output_dict=True))
+        scores = pd.DataFrame(classification_report(test['hate'], preds, output_dict=True))
         return scores, preds
