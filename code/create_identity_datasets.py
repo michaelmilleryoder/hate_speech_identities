@@ -51,8 +51,11 @@ class IdentityDatasetCreator:
         self.expanded_datasets = None
         self.folds = {}
         self.combined_folds = {}
-        self.threshold = 333 # minimum number of intances of hate to include an identity in a dataset
+        self.max_oversample = 2 # maximum multiplier for oversampling small datasets
+        self.threshold = 113 # minimum number of intances of hate to include an identity in a dataset
             # Have put 500 for separate identity dataset PCA, 333 for combined over 3 datasets (to make 1000)
+            # n_desired_instances(900)/n_selected_datasets/(4)/max_oversample(2)
+            # TODO: improve this process
         self.folds_path = f'../data/identity_splits_{self.hate_ratio}hate.pkl'
         self.combined_path = None
         self.expanded_path = f'../tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
@@ -106,16 +109,18 @@ class IdentityDatasetCreator:
         # this only selects identities with a threshold minimum of hate for each identity in each dataset. 
         # Could relax it
         identities = [identity for dataset, identity in filtered_dataset_identities]
-        identities = [identity for identity in identities if identities.count(identity) == len(self.selected_datasets)]
+        identities = [identity for identity in identities if identities.count(identity) == len(self.selected_datasets)] # selected identities above minimum threshold in all selected datasets
         combined_identity_datasets = {} # identity: data
 
-        # Could run sample_to_ratio on concatenated expanded datasets instead
+        # Could run sample_to_ratio on concatenated expanded datasets instead. 
+        # Would then have to split into folds
+        # Not sure if that would be better or not
         for identity in identities:
             self.combined_folds[identity] = {}
             for fold in ['train', 'test']:
-                min_len = min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
+                min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
                 self.combined_folds[identity][fold] = pd.concat(
-                    [self.folds[(dataset, identity)][fold].sample(min_len, random_state=9) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
+                    [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
                 get_stats(self.combined_folds[identity][fold], identity)
             
         # Save out
@@ -275,8 +280,6 @@ class IdentityDatasetCreator:
         # Get frequncies of grouped labels across datasets
         group_targets = [] # target_group, group_label, dataset, count
         for dataset in self.processed_datasets:
-            #if dataset.name == 'cad':
-            #    pdb.set_trace()
             target_counts = dataset.target_counts(just_hate=True)
             target_counts['dataset'] = dataset.name
             target_counts['identity_group'] = target_counts.group.map(lambda x: self.identity_groups.get(x, [x] if x in self.grouped_identities else []))
