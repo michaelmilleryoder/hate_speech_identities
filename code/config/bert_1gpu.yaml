@@ -11,7 +11,7 @@ classifier:
 heg_comparison:
   run: True
   create_splits: False # create comparison splits
-  cv_runs: 2
+  cv_runs: 5
 
 pca:
   run: False

@@ -11,7 +11,10 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import numpy as np
 import tensorflow as tf
 tf.get_logger().setLevel('ERROR')
+
 from sklearn.metrics import classification_report
+from sklearn.model_selection import GroupShuffleSplit
+
 import pandas as pd
 from tqdm import tqdm
 
@@ -53,9 +56,9 @@ class BertClassifier:
         self.callbacks = [
                 #tf.keras.callbacks.ModelCheckpoint(
                 #            filepath='../models/output',save_weights_only=True, monitor='val_loss', mode='min',save_best_only=True),
-                #tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1)
+                tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=5, verbose=1)
                         ]
-        self.epochs = 20
+        self.epochs = 50 # maximum number of epochs to train
         #self.strategy = tf.distribute.MirroredStrategy() # for multiple GPUs
         #self.strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
         if self.n_gpus > 1:
@@ -100,17 +103,26 @@ class BertClassifier:
         attention_masks=np.array(attention_masks)
         return input_ids, attention_masks
 
-    def train_eval(self, train, test):
+    def train_eval(self, orig_train, test):
         """ Train and evaluate on train and test dataframes """
+
+        # Get a dev set as 10% of train
+        splitter = GroupShuffleSplit(n_splits=1, test_size=0.1)
+        for train_inds, dev_inds in splitter.split(orig_train, groups=orig_train.index):
+            train = orig_train.iloc[train_inds]
+            dev = orig_train.iloc[dev_inds]
 
         # Vectorize, preprocess input
         input_ids_train, attention_masks_train = self.create_sentence_embeddings(
                 train['text'].map(preprocess))
+        input_ids_dev, attention_masks_dev = self.create_sentence_embeddings(
+                dev['text'].map(preprocess))
         input_ids_test, attention_masks_test = self.create_sentence_embeddings(
                 test['text'].map(preprocess))
 
         # Train, evaluate model 
-        self.build_compile_fit(input_ids_train, attention_masks_train, train['hate'])
+        self.build_compile_fit(input_ids_train, attention_masks_train, train['hate'], 
+                input_ids_dev, attention_masks_dev, dev['hate'])
         fold_scores, preds = self.predict(input_ids_test, attention_masks_test, test['hate'])
         return fold_scores, preds                 
 
@@ -124,7 +136,8 @@ class BertClassifier:
             self.model = TFBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=2)
             self.model.compile(loss=self.loss, optimizer=self.optimizer, metrics=[self.metric])
 
-    def build_compile_fit(self, input_ids, attention_masks, labels):
+    def build_compile_fit(self, input_ids, attention_masks, labels, 
+            input_ids_dev, attention_masks_dev, labels_dev):
         """ Specify, compile and fit the model """
         self.build_model()
 
@@ -145,11 +158,11 @@ class BertClassifier:
             warnings.simplefilter('ignore')
             self.model.fit([input_ids, attention_masks], labels, batch_size=self.batch_size, 
                 epochs=self.epochs, 
-                callbacks=self.callbacks, verbose=0)
+                callbacks=self.callbacks, 
+                validation_data=([input_ids_dev, attention_masks_dev], labels_dev),
+                verbose=0)
         tf.keras.backend.clear_session()
         K.clear_session()
-        #self.model.fit([input_ids, attention_masks], labels, batch_size=32, epochs=self.epochs, 
-        #    callbacks=self.callbacks, validation_data=([input_ids_val, attention_masks_val], labels_val))
 
     def predict(self, input_ids, attention_masks, gold):
         """ Make predictions on test data 
