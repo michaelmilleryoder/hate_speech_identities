@@ -59,7 +59,8 @@ class IdentityPCA:
                 n_instances = [df.instance_count.sum() for df in list(potential.values())]
                 selected_datasets = list(potential.keys())[n_instances.index(max(n_instances))]
             else:
-                pdb.set_trace()
+                n_instances = [df.instance_count.sum() for df in list(viable.values())]
+                selected_datasets = list(viable.keys())[n_instances.index(max(n_instances))]
             self.load_combined_identity_datasets(selected_datasets)
 
         # Run cross-dataset predictions and run PCA
@@ -81,10 +82,11 @@ class IdentityPCA:
         n_datasets_range = range(3, 7)
         combos = []
         for i in n_datasets_range:
-            combos.extend(list(itertools.combinations(dataset_names, 3)))
+            combos.extend(list(itertools.combinations(dataset_names, i)))
 
         min_hegemonic_categories = 3
-        min_combined_instances = 1000
+        min_combined_instances = 900
+        max_oversample = 2 # maximum multiplier for oversampling small datasets
         possible_dataset_combos = set()
         combo_counts = {}
         potential = {}
@@ -101,8 +103,9 @@ class IdentityPCA:
                 possible_combined = selected[selected.index.get_level_values('identity_group').isin(avail_counts.index)]
 
                 # Calculate how many instances could be in combined datasets 
-                combined_count = possible_combined.groupby(possible_combined.index.get_level_values('identity_group')).agg(
-                    {'instance_count': lambda x: min(x)*len(datasets)})
+                combined_count = possible_combined.groupby(
+                    possible_combined.index.get_level_values('identity_group')).agg(
+                    {'instance_count': lambda x: min(x) * max_oversample * len(datasets)})
                 combo_counts[datasets] = combined_count
                 viable_combined = combined_count[combined_count['instance_count']>=min_combined_instances]
                 if len(viable_combined) >= min_hegemonic_categories - 1:
@@ -113,7 +116,7 @@ class IdentityPCA:
         if len(viable) > 0:
             print(viable)
         else:
-            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories} identities")
+            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories} identities (up to {max_oversample}x oversampled)")
             print(f"Closest is {potential}")
 
         return viable, potential
@@ -218,9 +221,9 @@ class IdentityPCA:
 
         # Save out
         if self.combine:
-            outname = 'combined_identity_pca'
+            outname = f'combined_identity_{self.clf_name}_{"+".join(self.ic.selected_datasets)}_pca'
         else:
-            outname = 'dataset_identity_pca'
+            outname = f'dataset_identity_{self.clf_name}_pca'
         outpath = f'../output/{outname}.png'
         fig.write_image(outpath)
         tqdm.write(f"Saved dataset identity PCA to {outpath}")

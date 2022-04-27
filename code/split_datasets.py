@@ -14,8 +14,6 @@ def flexible_sample(df, n):
         If n > len(df), sample all rows and sample additional necessary rows
         (trying to have less duplicates than sampling with replacement)
     """
-    # assert n < 2*len(df)
-    
     if len(df) == 0:
         return df
     

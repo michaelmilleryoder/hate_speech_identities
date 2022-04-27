@@ -1,5 +1,5 @@
 ---
-load_datasets: False # load raw or processed datasets instead of task-specific splits
+load_datasets: True # load raw or processed datasets instead of task-specific splits
 reprocess_datasets: False # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
 classifier: 
@@ -13,7 +13,7 @@ heg_comparison:
 
 pca:
   run: True
-  create_identity_datasets: False # False or list of either or both 'separate', 'combined'
+  create_identity_datasets: True # False or list of either or both 'separate', 'combined'
   combine_datasets: True
   incremental: False
 
