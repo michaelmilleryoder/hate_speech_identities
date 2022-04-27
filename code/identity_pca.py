@@ -170,7 +170,7 @@ class IdentityPCA:
             scores.append(score_line)
 
             # Save out scores, run PCA incrementally
-            if self.incremental:
+            if self.incremental and len(scores) > 2:
                 self.scores = pd.DataFrame(scores).set_index('train_dataset')
                 if self.combine:
                     scores_outpath = f'../output/combined_identity_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
