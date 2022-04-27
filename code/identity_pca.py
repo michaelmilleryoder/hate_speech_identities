@@ -223,4 +223,4 @@ class IdentityPCA:
             outname = 'dataset_identity_pca'
         outpath = f'../output/{outname}.png'
         fig.write_image(outpath)
-        print(f"Saved dataset identity PCA to {outpath}")
+        tqdm.write(f"Saved dataset identity PCA to {outpath}")
