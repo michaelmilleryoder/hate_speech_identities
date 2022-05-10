@@ -249,11 +249,6 @@ class IdentityDatasetCreator:
             tqdm.write(dataset.name)
             data = dataset.data.copy()
             data['identity_groups'] = data['target_groups'].map(self.assign_groups)
-            #s = data['identity_groups'].progress_apply(pd.Series, 1).stack() # takes forever
-            #s.index = s.index.droplevel(-1)
-            #s.name = 'identity_group'
-            #del data['identity_groups']
-            #self.expanded_datasets[dataset.name] = data.join(s)
             self.expanded_datasets[dataset.name] = data.explode('identity_groups').rename(columns={'identity_groups': 'identity_group'})
 
         # Save out in case I want to examine it

@@ -30,6 +30,7 @@ class DataLoader:
         """ Constructor """
         self.groups_norm = None
         self.group_labels = None
+        self.group_categories = None
         self.load_resources()
 
     def load_resources(self):
@@ -43,6 +44,11 @@ class DataLoader:
         group_label_path = '../resources/group_labels.json'
         with open(group_label_path, 'r') as f:
             self.group_labels = json.load(f) 
+
+        # Load group categories dict
+        group_categories_path = '../resources/identity_categories.json'
+        with open(group_categories_path, 'r') as f:
+            self.group_categories = json.load(f) 
 
         # Make sure all normalized terms have group labels
         assert len([label for label in set(self.groups_norm.values()) if label not in self.group_labels]) == 0
@@ -59,6 +65,14 @@ class DataLoader:
             elif 'hegemonic' in labels:
                 label = 'hegemonic'
         return label
+
+    def assign_categories(self, targets):
+        """ Assign identity categories to target groups """
+        if targets is None or isinstance(targets, float) or len(targets) == 0:
+            labels = []
+        else:
+            labels = sorted({self.group_categories.get(target, 'other') for target in targets})
+        return labels
 
     def load(self, dataset):
         """ Load a dataset to dataset.data. Usually overwritten by subclasses
@@ -91,6 +105,9 @@ class DataLoader:
 
         # Assign group label to instances
         dataset.data['group_label'] = dataset.data.target_groups.map(self.assign_label)
+
+        # Assign group categories to instances
+        dataset.data['categories'] = dataset.data.target_groups.map(self.assign_categories)
 
         # Drop nans in text column
         dataset.data = dataset.data.dropna(subset=['text'], how='any')
