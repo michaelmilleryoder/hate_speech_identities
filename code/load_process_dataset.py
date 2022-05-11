@@ -74,6 +74,9 @@ class DataLoader:
             labels = sorted({self.group_categories.get(target, 'other') for target in targets})
         return labels
 
+    def dummy_categories(self):
+        """ Create boolean columns for each category of interest for later filtering """
+
     def load(self, dataset):
         """ Load a dataset to dataset.data. Usually overwritten by subclasses
         """

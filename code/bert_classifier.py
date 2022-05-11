@@ -157,11 +157,12 @@ class BertClassifier:
         #self.model.fit(train, epochs=self.epochs, callbacks=self.callbacks)
         with warnings.catch_warnings():
             warnings.simplefilter('ignore')
-            self.model.fit([input_ids, attention_masks], labels, batch_size=self.batch_size, 
-                epochs=self.epochs, 
-                callbacks=self.callbacks, 
-                validation_data=([input_ids_dev, attention_masks_dev], labels_dev),
-                verbose=0)
+        self.model.fit([input_ids, attention_masks], labels, batch_size=self.batch_size, 
+            epochs=self.epochs, 
+            callbacks=self.callbacks, 
+            validation_data=([input_ids_dev, attention_masks_dev], labels_dev),
+            verbose=0
+        )
         tf.keras.backend.clear_session()
         K.clear_session()
 
