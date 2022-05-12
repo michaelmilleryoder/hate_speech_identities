@@ -316,7 +316,7 @@ class SbicLoader(DataLoader):
         flattened = set()
         for targets in eval(target_str):
             for target in targets.split(', '):
-                flattened.add(self.groups_norm.get(target, target))
+                flattened.add(self.groups_norm.get(target.lower(), target.lower()))
         return list(flattened)
         
 
@@ -349,6 +349,7 @@ class CivilcommentsLoader(DataLoader):
     def extract_target_groups(self, dataset):
         """ Extract target groups column """
         target_cols = dataset.data.columns[dataset.data.columns.tolist().index('male'):-2]
+        pdb.set_trace() # TODO: check for 'identity_annotator_count' column
         exclude_cols = ['other_religion', 'other_race_or_ethnicity']
         target_cols = [el for el in target_cols if el not in exclude_cols]
 
