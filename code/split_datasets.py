@@ -37,7 +37,7 @@ class ComparisonSplits():
         self.datasets = datasets
         self.removal_groups = removal_groups
         self.hate_ratio = hate_ratio
-        self.splits = {dataset.name: {'hegsplits': {}, 'controlsplits': {}} for dataset in self.datasets}
+        self.splits = {dataset.name: {'expsplits': {}, 'controlsplits': {}} for dataset in self.datasets}
 
     def get_stats(self):
         """ Print statistics on dataset splits, including comparisons.
@@ -183,8 +183,8 @@ class ComparisonSplits():
 
         self.splits[dataset.name] = {}
         
-        # Heg splits
-        splits_name = 'hegsplits'
+        # Experimental splits
+        splits_name = 'expsplits'
         self.splits[dataset.name][splits_name], n_samples, n_special = self.sample_to_ratio(dataset.data, split_criteria[splits_name])
         
         # Control splits
@@ -196,9 +196,9 @@ class ComparisonSplits():
         for dataset_name, splits in self.splits.items():
             # Save out csvs
             if os.path.exists('/storage2/mamille3/data/hate_speech'):
-                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
+                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed/{"_".join(self.removal_groups)}'
             else:
-                dataset_path = f'/usr0/home/mamille3/data/hate_speech/{dataset_name}/processed'
+                dataset_path = f'/home/mamille3/data/hate_speech/{dataset_name}/processed/{"_".join(self.removal_groups)}'
             if not os.path.exists(dataset_path):
                 os.makedirs(dataset_path)
             for splits_name, s in splits.items():

@@ -83,10 +83,10 @@ class RemovalComparison:
         for dataset_name in tqdm(self.comparisons.splits, desc='datasets', ncols=100):
             tqdm.write(f'{dataset_name}')
             scores[dataset_name] = {}
-            # cv_runs*2-fold CV * special/no-special (2) * hegsplits/controlsplits (2)
+            # cv_runs*2-fold CV * special/no-special (2) * expsplits/controlsplits (2)
             pbar = tqdm(total=self.cv_runs*2*2*2, desc='\tcv runs', ncols=80) 
 
-            for splits in ['hegsplits', 'controlsplits']:
+            for splits in ['expsplits', 'controlsplits']:
                 tqdm.write(f'\t{splits}')
                 scores[dataset_name][splits] = {}
                 split_f1 = {}
@@ -135,10 +135,11 @@ class RemovalComparison:
             # Save out CV scores (do after finishing every dataset)
             f1_df = pd.DataFrame(f1_scores)
             sigs_df = pd.DataFrame(sigs)
-            with open(f'../tmp/{clf_name}_{self.cv_runs}x2cv_scores.pkl', 'wb') as f:
-                pickle.dump(scores, f)
-            f1_df.to_csv(f'../output/{clf_name}_{self.cv_runs}x2cv_f1.csv')
-            sigs_df.to_csv(f'../output/{clf_name}_{self.cv_runs}x2cv_sigs.csv')
+            #with open(f'../tmp/{clf_name}_{self.cv_runs}x2cv_scores.pkl', 'wb') as f:
+            #    pickle.dump(scores, f)
+            outstr = 'f../output/removal_comparison/{"_".join(self.removal_groups)}_{clf_name}_{self.cv_runs}x2cv_'
+            f1_df.to_csv(outstr + '_f1.csv')
+            sigs_df.to_csv(outstr + 'sig.csv')
 
             print(f1_df)
             print(sigs_df)
