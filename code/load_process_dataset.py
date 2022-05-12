@@ -19,6 +19,7 @@ import pandas as pd
 import datasets # from HuggingFace
 from tqdm import tqdm
 tqdm.pandas()
+from sklearn.preprocessing import MultiLabelBinarizer
 
 
 class DataLoader:
@@ -74,8 +75,22 @@ class DataLoader:
             labels = sorted({self.group_categories.get(target, 'other') for target in targets})
         return labels
 
-    def dummy_categories(self):
-        """ Create boolean columns for each category of interest for later filtering """
+    def get_dummy_columns(self, data, colname, exclude=None):
+        """ Create boolean columns for each value in a column 
+            Args:
+                data: the dataframe to manipulate
+                colname: the name of the list column whose values will become boolean columns
+                exclude: values to exclude
+            Returns new dataframe with the columns
+        """
+        mlb = MultiLabelBinarizer()
+        dummy_cols = pd.DataFrame(mlb.fit_transform(data[colname]), 
+                columns=[f'{colname}_{val}' for val in mlb.classes_],
+                index=data.index).astype(bool)
+        if exclude is not None:
+            dummy_cols.drop(columns=[f'{colname}_{exclude_val}' for exclude_val in exclude])
+        data = pd.concat([data, dummy_cols], axis=1)
+        return data
 
     def load(self, dataset):
         """ Load a dataset to dataset.data. Usually overwritten by subclasses
@@ -111,6 +126,7 @@ class DataLoader:
 
         # Assign group categories to instances
         dataset.data['categories'] = dataset.data.target_groups.map(self.assign_categories)
+        dataset.data = get_dummy_columns(dataset.data, 'categories', exclude=['other'])
 
         # Drop nans in text column
         dataset.data = dataset.data.dropna(subset=['text'], how='any')
@@ -122,15 +138,18 @@ class DataLoader:
         #    pdb.set_trace()
 
     def label_control(self, dataset):
-        """ Label which instances target terms in the control set """
+        """ Label which instances target terms in the control set for different removal groups """
         ""
-        # Load control group terms
-        path = '../resources/control_identity_terms.txt'
-        with open(path, 'r') as f:
-            control_terms = f.read().splitlines()
 
-        # Control group column
-        dataset.data['in_control'] = dataset.data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
+        control_paths = [os.path.join('../resources', name) for name in os.listdir('../resources') if name.startswith('control_identity_terms')]
+        # Load control group terms
+        for path in control_paths:
+            with open(path, 'r') as f:
+                control_terms = f.read().splitlines()
+            removal_group = path.split('_')[-1].split('.')[0]
+
+            # Control group column
+            dataset.data[f'control_{removal_group}'] = dataset.data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)
 
     def extract_target_groups(self, dataset):
         """ Extract target groups into a list column. Usually overwritten by specific datasets. """

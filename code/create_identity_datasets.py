@@ -243,12 +243,13 @@ class IdentityDatasetCreator:
             (duplicate instances with multiple target identity groups)
         """
         # Select instances based on selected datasets and identity groups
-
-        self.expanded_datasets = {}
         for dataset in tqdm(self.processed_datasets):
             tqdm.write(dataset.name)
             data = dataset.data.copy()
             data['identity_groups'] = data['target_groups'].map(self.assign_groups)
+            # Explode rows and duplicate those with multiple identity group assignments
+            # Alternatively could create boolean columns with whether each possible identity group is present,
+            # but there are many possibilities and it would add many columns
             self.expanded_datasets[dataset.name] = data.explode('identity_groups').rename(columns={'identity_groups': 'identity_group'})
 
         # Save out in case I want to examine it

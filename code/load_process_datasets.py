@@ -65,9 +65,12 @@ class DatasetsLoader:
             loader.save(dataset)
 
     def get_control_terms(self):
-        """ Get, save out marginalized terms with similar frequencies across datasets for comparison
-            to hegemonic terms
+        """ Get, save out terms with similar frequencies across datasets for comparison
+            to identities that are removed for performance comparisons
         """
+
+        eg_data = self.datasets[0].data
+        removal_groups = ['hegemonic'] + [col[len('identity_categories_'):] for col in eg_data.columns if col.startswith('identity_categories_')]
         
         # Get frequncies of normalized labels across datasets
         group_targets = [] # target_group, group_label, dataset, count
@@ -79,40 +82,49 @@ class DatasetsLoader:
         target_dataset_counts = pd.concat(group_targets)
         target_dataset_counts.drop_duplicates(inplace=True)
 
-        ## Get distributions of counts over datasets for normalized hegemonic labels
-        heg_targets = target_dataset_counts.query('group_label == "hegemonic"')
-        heg_counts = heg_targets.drop(columns=['group_label']).pivot_table(index=['group'], columns=['dataset'])
-        heg_counts.fillna(0, inplace=True)
-        log_heg_counts = heg_counts.apply(np.log2).replace(-np.inf, -1)
-        log_heg_counts['magnitude'] = np.linalg.norm(log_heg_counts[[col for col in log_heg_counts.columns if col[0] == 'count']], axis=1)
-        log_heg_counts = log_heg_counts.sort_values('magnitude', ascending=False).drop(columns='magnitude')
-        
-        # Find marginalized terms with similar frequency distributions across datasets as margemonic ones
-        marg_targets = target_dataset_counts.query('group_label == "marginalized"')
-        marg_counts = marg_targets.drop(columns=['group_label']).pivot_table(index=['group'], columns=['dataset'])
-        marg_counts.fillna(0, inplace=True)
-        #log_marg_counts = marg_counts.apply(np.log2).replace(-np.inf, -1)
-        log_marg_counts = marg_counts.apply(np.log2).replace(-np.inf, -1)
-        marg = log_marg_counts.copy()
-        control_terms = []
-        for heg_term, heg_vec in log_heg_counts.iterrows():
-            distances = np.linalg.norm(marg.values - heg_vec.values, axis=1)
-            closest_marg = marg.index[np.argmin(distances)]
-            control_terms.append(closest_marg)
-            marg.drop(closest_marg, inplace=True) 
+        for removal_group in removal_groups:
+            # used to restrict hegemonic control terms to just be marginalized (instead of any other)
+            if self.removal_group == 'hegemonic':
+                criteria = 'group_label == "hegemonic"'
+                removal_col = 'group_label'
+            else:
+                criteria = f'identity_categories_{self.removal_group}'
+                removal_col = f'identity_categories_{self.removal_group}'
 
-        # Save control terms out
-        outpath = '../resources/control_identity_terms.txt'
-        print("Control terms:")
-        with open(outpath, 'w') as f:
-            for term in control_terms:
-                print(f'\t{term}')
-                f.write(f'{term}\n')
+            ## Get distributions of counts over datasets for normalized labels
+            removal_targets = target_dataset_counts.query(criteria)
+            removal_counts = removal_targets.drop(columns=[removal_col]).pivot_table(index=['group'], columns=['dataset'])
+            removal_counts.fillna(0, inplace=True)
+            log_removal_counts = removal_counts.apply(np.log2).replace(-np.inf, -1)
+            log_removal_counts['magnitude'] = np.linalg.norm(
+                    log_removal_counts[[col for col in log_removal_counts.columns if col[0] == 'count']], axis=1)
+            log_removal_counts = log_removal_counts.sort_values('magnitude', ascending=False).drop(columns='magnitude')
+            
+            # Find marginalized terms with similar frequency distributions across datasets as margemonic ones
+            nonremoval_targets = target_dataset_counts.query('not ' + criteria)
+            nonremoval_counts = nonremoval_targets.drop(columns=[removal_col]).pivot_table(index=['group'], columns=['dataset'])
+            nonremoval_counts.fillna(0, inplace=True)
+            log_nonremoval_counts = nonremoval_counts.apply(np.log2).replace(-np.inf, -1)
+            marg = log_nonremoval_counts.copy()
+            control_terms = []
+            for removal_term, removal_vec in log_removal_counts.iterrows():
+                distances = np.linalg.norm(marg.values - removal_vec.values, axis=1)
+                closest_marg = marg.index[np.argmin(distances)]
+                control_terms.append(closest_marg)
+                marg.drop(closest_marg, inplace=True) 
+
+            # Save control terms out
+            outpath = f'../resources/control_identity_terms_{removal_group}.txt'
+            print("Control terms:")
+            with open(outpath, 'w') as f:
+                for term in control_terms:
+                    print(f'\t{term}')
+                    f.write(f'{term}\n')
         
-        # Check counts across datasets for heg and control
-        print("Heg counts compared with control counts")
-        print(heg_counts.sum())
-        print(heg_counts.sum().sum())
-        print()
-        print(marg_counts.loc[control_terms].sum())
-        print(marg_counts.loc[control_terms].sum().sum())
+            # Check counts across datasets for heg and control
+            print("Removal counts compared with control counts")
+            print(removal_counts.sum())
+            print(removal_counts.sum().sum())
+            print()
+            print(nonremoval_counts.loc[control_terms].sum())
+            print(nonremoval_counts.loc[control_terms].sum().sum())

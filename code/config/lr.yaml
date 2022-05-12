@@ -1,18 +1,19 @@
 ---
 load_datasets: True # load raw or processed datasets instead of task-specific splits
-reprocess_datasets: False # hate/non-hate ratio to sample each dataset
+reprocess_datasets: True # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
 classifier: 
   name: 'lr'
   settings: {}
 
-heg_comparison:
-  run: False
-  create_splits: False # create comparison splits
+removal_comparison:
+  run: True
+  removal_groups: ['race/ethnicity']
+  create_splits: True # create comparison splits
   cv_runs: 5
 
 pca:
-  run: True
+  run: False
   create_identity_datasets: True # False or list of either or both 'separate', 'combined'
   combine_datasets: True
   incremental: False

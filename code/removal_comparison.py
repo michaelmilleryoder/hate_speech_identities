@@ -14,19 +14,21 @@ from bert_classifier import BertClassifier
 from lr_classifier import LogisticRegressionClassifier
 
 
-class HegComparison:
+class RemovalComparison:
     """ Compare splits with and without hegemonic hate.
         Test whether including hate toward hegemonic affects hate speech classification performance
             Split data into with-hegemonic and no-hegemonic, with-control and no-control
             Run logistic regression classifiers on these splits, save out results
     """
 
-    def __init__(self, datasets, create_splits: bool = False, hate_ratio: float = 0.3, 
+    def __init__(self, datasets, removal_groups, create_splits: bool = False, hate_ratio: float = 0.3, 
             cv_runs: int = 5):
         """ Args:
                 create_splits: whether to recreate splits. If False, will just load them
+                removal_groups: what sets of identities to remove (hegemonic, an identity category)
         """
         self.datasets = datasets
+        self.removal_groups = removal_groups
         self.create_splits = create_splits
         self.hate_ratio = hate_ratio
         self.cv_runs = cv_runs
@@ -48,13 +50,12 @@ class HegComparison:
         # Train and evaluate LR classifier on dataset splits (heg/no-heg vs control/no-control)
         print(f"Training and evaluating {clf_name} classifiers on splits...")
         self.train_eval_cv(clf_name, clf_settings)
-        #self.train_eval_lr()
 
     def create_dataset_splits(self):
-        """ Create dataset splits of heg/no-heg vs control/no-control """
-        self.view_heg_vs_control()
-        self.comparisons = ComparisonSplits(self.datasets, self.hate_ratio)
-        self.comparisons.create_heg_control()
+        """ Create dataset splits of e.g. heg/no-heg vs control/no-control 
+        """
+        self.comparisons = ComparisonSplits(self.datasets, self.removal_groups, self.hate_ratio)
+        self.comparisons.create_exp_control_splits()
 
     def load_dataset_splits(self):
         """ Load already created dataset splits """
@@ -64,6 +65,7 @@ class HegComparison:
 
     def view_heg_vs_control(self):
         """ Print number of instances marked heg vs marked control per dataset """
+        # TODO: should move to a function in split_datasets.py, combine with get_stats
         for dataset in self.datasets:
             n_hegemonic = len(dataset.data.query("group_label == 'hegemonic'"))
             n_control = len(dataset.data.query("in_control == True"))

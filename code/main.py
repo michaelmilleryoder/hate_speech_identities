@@ -18,7 +18,7 @@ import pandas as pd
 
 from data import Dataset
 from split_datasets import ComparisonSplits
-from heg_comparison import HegComparison
+from removal_comparison import RemovalComparison
 from load_process_datasets import DatasetsLoader
 from identity_pca import IdentityPCA
 
@@ -40,14 +40,15 @@ def main():
         loader = DatasetsLoader(datasets)
         loader.load_datasets(reprocess=config['reprocess_datasets'])
 
-    # Run with-heg/no-heg comparison
-    if config['heg_comparison']['run']:
-        heg_comparison = HegComparison(datasets, 
-            create_splits=config['heg_comparison']['create_splits'], 
+    # Run removal comparison (with-heg/no-heg for example)
+    if config['removal_comparison']['run']:
+        removal_comparison = RemovalComparison(datasets, 
+            config['removal_comparison']['removal_groups'],
+            create_splits=config['removal_comparison']['create_splits'], 
             hate_ratio=config['hate_ratio'],
-            cv_runs=config['heg_comparison']['cv_runs'],
+            cv_runs=config['removal_comparison']['cv_runs'],
         )
-        heg_comparison.run(config['classifier']['name'], config['classifier']['settings'])
+        removal_comparison.run(config['classifier']['name'], config['classifier']['settings'])
 
     # Run identity split PCA
     if config['pca']['run']:
