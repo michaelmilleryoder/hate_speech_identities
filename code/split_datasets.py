@@ -98,6 +98,7 @@ class ComparisonSplits():
             n_special_hate = len(special_hate)
             n_special_nonhate = int(len(special_nonhate)/len(data.query('not hate')) * n_samples[False]) # match ratio overall in the dataset
         n_nonhate = len(resampled_no_special.query('not hate'))
+        pdb.set_trace()
         resampled_with_special = pd.concat([
             resampled_no_special.query('hate').sample(n_samples[True]-n_special_hate), 
             special_hate,
@@ -147,7 +148,6 @@ class ComparisonSplits():
                 exp_criteria_list.append(f'target_category_{removal_group}')
         exp_criteria = 'and'.join(exp_criteria_list)
         control_criteria = 'and'.join([f'control_{removal_group}' for removal_group in self.removal_groups])
-        pdb.set_trace() # check criteria
 
         for dataset in tqdm(self.datasets):
             split_criteria = {

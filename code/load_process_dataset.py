@@ -30,14 +30,16 @@ def get_dummy_columns(data, colname, exclude=None):
             exclude: values to exclude
         Returns new dataframe with the columns
     """
-    name_transform = {'target_categories': 'target_category'}
+    name_transform = {'target_categories': 'target_category', 
+                        'identity_categories': 'identity_category',
+                     }
     mlb = MultiLabelBinarizer()
     dummy_cols = pd.DataFrame(mlb.fit_transform(data[colname]), 
-            columns=[f'{name_transform.get(colname, colname)}_{val}' for val in mlb.classes_],
+            columns=[f'{name_transform.get(colname, colname)}_{val.replace("/", "_")}' for val in mlb.classes_],
             index=data.index).astype(bool)
     if exclude is not None:
         dummy_cols.drop(columns=[f'{name_transform.get(colname, colname)}_{exclude_val}' for exclude_val in exclude], 
-                errors='ignore')
+                errors='ignore', inplace=True)
     data = pd.concat([data, dummy_cols], axis=1)
     return data
 
@@ -72,7 +74,7 @@ class DataLoader:
             self.identity_categories = json.load(f) 
 
         # Make sure all normalized terms have group labels
-        norm_terms_no_label = [label for label in set(self.groups_norm.values()) if label not in self.group_labels]
+        norm_terms_no_label = [label for label in set(self.groups_norm.values()) if label not in self.group_labels and label != '']
         assert len(norm_terms_no_label) == 0
 
     def assign_label(self, targets):
@@ -211,7 +213,7 @@ class Kennedy2020Loader(DataLoader):
     def extract_target_groups(self, dataset):
         target_cols = [col for col in dataset.data.columns.tolist() if col.startswith('target_')]
         group_target_cols = [col for col in target_cols if 'disability' in col or (col.count('_')>1 and 'other' not in col)]
-        dataset.data['target_groups'] = dataset.data[group_target_cols].progress_apply(self.extract_targets, axis=1)
+        dataset.data['target_groups'] = dataset.data[group_target_cols].apply(self.extract_targets, axis=1)
         
     @classmethod
     def extract_group(cls, colname: str):
@@ -227,7 +229,8 @@ class Kennedy2020Loader(DataLoader):
                 row: row as a Series (from apply)
         """
         targets = [self.groups_norm.get(self.extract_group(colname), self.extract_group(colname)) \
-            for colname in row[row==True].index]
+            for colname in row[row==True].index if self.groups_norm.get(
+            self.extract_group(colname), self.extract_group(colname)) != '']
         if len(targets) > 0:
             return targets
         else:
@@ -256,7 +259,7 @@ class CadLoader(DataLoader):
         dataset.data['hate'] = dataset.data.annotation_Primary.map(label_map.get)
 
     def extract_target_groups(self, dataset):
-        dataset.data['target_groups'] = dataset.data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) else [])
+        dataset.data['target_groups'] = dataset.data.annotation_Target.map(lambda x: [self.groups_norm.get(x,x)] if isinstance(x, str) and self.groups_norm.get(x,x) != '' else [])
 
     def rename_text_column(self, dataset):
         # Rename text col
@@ -283,7 +286,7 @@ class HatexplainLoader(DataLoader):
 
     def extract_target_groups(self, dataset):
         dataset.data['target_groups'] = dataset.data['targets'].map(
-            lambda x: [self.groups_norm.get(t.lower(), t.lower()) for t in x])
+            lambda x: [self.groups_norm.get(t.lower(), t.lower()) for t in x if self.groups_norm.get(t.lower(), t.lower()) != ''])
 
 
 class Elsherief2021Loader(DataLoader):
@@ -305,7 +308,7 @@ class Elsherief2021Loader(DataLoader):
          
     def extract_target_groups(self, dataset):
         ## Annotate target type
-        dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) else [])
+        dataset.data['target_groups'] = dataset.data.target.map(lambda x: [self.groups_norm.get(x.lower(),x.lower())] if isinstance(x, str) and self.groups_norm.get(x.lower(),x.lower()) != '' else [])
         
     def rename_text_column(self, dataset):
         """ Rename text column """
@@ -340,7 +343,9 @@ class SbicLoader(DataLoader):
         flattened = set()
         for targets in eval(target_str):
             for target in targets.split(', '):
-                flattened.add(self.groups_norm.get(target.lower(), target.lower()))
+                normed = self.groups_norm.get(target.lower(), target.lower())
+                if normed != '':
+                    flattened.add(normed)
         return list(flattened)
         
 
@@ -352,7 +357,7 @@ class Salminen2018Loader(DataLoader):
         subcols = [col for col in dataset.data.columns if 'Sub' in col]
         dataset.data['subs'] = dataset.data[subcols].agg(lambda x: [el for el in x if isinstance(el, str)], axis=1)
         dataset.data['target_groups'] = dataset.data['subs'].map(lambda x: [
-            self.groups_norm.get(self.extract_group(t), self.extract_group(t)) for t in x])
+            self.groups_norm.get(self.extract_group(t), self.extract_group(t)) for t in x if self.groups_norm.get(self.extract_group(t), self.extract_group(t)) != ''])
         
     def label_hate(self, dataset):
         """ Label binary hate speech column """
