@@ -60,8 +60,8 @@ class RemovalComparison:
     def load_dataset_splits(self):
         """ Load already created dataset splits """
         print("Loading dataset splits...")
-        self.comparisons = ComparisonSplits(self.datasets, self.hate_ratio)
-        self.comparisons.load_heg_control()
+        self.comparisons = ComparisonSplits(self.datasets, self.removal_groups, self.hate_ratio)
+        self.comparisons.load_splits()
 
     def view_heg_vs_control(self):
         """ Print number of instances marked heg vs marked control per dataset """

@@ -22,6 +22,26 @@ tqdm.pandas()
 from sklearn.preprocessing import MultiLabelBinarizer
 
 
+def get_dummy_columns(data, colname, exclude=None):
+    """ Create boolean columns for each value in a column 
+        Args:
+            data: the dataframe to manipulate
+            colname: the name of the list column whose values will become boolean columns
+            exclude: values to exclude
+        Returns new dataframe with the columns
+    """
+    name_transform = {'target_categories': 'target_category'}
+    mlb = MultiLabelBinarizer()
+    dummy_cols = pd.DataFrame(mlb.fit_transform(data[colname]), 
+            columns=[f'{name_transform.get(colname, colname)}_{val}' for val in mlb.classes_],
+            index=data.index).astype(bool)
+    if exclude is not None:
+        dummy_cols.drop(columns=[f'{name_transform.get(colname, colname)}_{exclude_val}' for exclude_val in exclude], 
+                errors='ignore')
+    data = pd.concat([data, dummy_cols], axis=1)
+    return data
+
+
 class DataLoader:
     """ Load, process a dataset.
         TODO: probably make this DataProcessor instead, consider moving basic saving and loading to data.py
@@ -31,7 +51,7 @@ class DataLoader:
         """ Constructor """
         self.groups_norm = None
         self.group_labels = None
-        self.group_categories = None
+        self.identity_categories = None
         self.load_resources()
 
     def load_resources(self):
@@ -47,12 +67,13 @@ class DataLoader:
             self.group_labels = json.load(f) 
 
         # Load group categories dict
-        group_categories_path = '../resources/identity_categories.json'
-        with open(group_categories_path, 'r') as f:
-            self.group_categories = json.load(f) 
+        identity_categories_path = '../resources/identity_categories.json'
+        with open(identity_categories_path, 'r') as f:
+            self.identity_categories = json.load(f) 
 
         # Make sure all normalized terms have group labels
-        assert len([label for label in set(self.groups_norm.values()) if label not in self.group_labels]) == 0
+        norm_terms_no_label = [label for label in set(self.groups_norm.values()) if label not in self.group_labels]
+        assert len(norm_terms_no_label) == 0
 
     def assign_label(self, targets):
         """ Assign labels to target groups """
@@ -70,32 +91,16 @@ class DataLoader:
     def assign_categories(self, targets):
         """ Assign identity categories to target groups """
         if targets is None or isinstance(targets, float) or len(targets) == 0:
-            labels = []
+            flattened = []
         else:
-            labels = sorted({self.group_categories.get(target, 'other') for target in targets})
-        return labels
-
-    def get_dummy_columns(self, data, colname, exclude=None):
-        """ Create boolean columns for each value in a column 
-            Args:
-                data: the dataframe to manipulate
-                colname: the name of the list column whose values will become boolean columns
-                exclude: values to exclude
-            Returns new dataframe with the columns
-        """
-        mlb = MultiLabelBinarizer()
-        dummy_cols = pd.DataFrame(mlb.fit_transform(data[colname]), 
-                columns=[f'{colname}_{val}' for val in mlb.classes_],
-                index=data.index).astype(bool)
-        if exclude is not None:
-            dummy_cols.drop(columns=[f'{colname}_{exclude_val}' for exclude_val in exclude])
-        data = pd.concat([data, dummy_cols], axis=1)
-        return data
+            categories = [self.identity_categories.get(target, ['other']) for target in targets]
+            flattened = sorted(set([category for category_list in categories for category in category_list]))
+        return flattened
 
     def load(self, dataset):
         """ Load a dataset to dataset.data. Usually overwritten by subclasses
         """
-        print(f"Loading {dataset.name}")
+        print(f"\tLoading {dataset.name}...")
         dataset.data = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[0]), index_col=0)
 
     def process(self, dataset):
@@ -105,7 +110,6 @@ class DataLoader:
          * 'hate' binary hate_speech column, 
          * 'target_groups' list column of normalized identities
          * 'group_label' column {hegemonic, marginalized, other}
-         * 'in_control' column: boolean whether a targeted group is in the control list of identity terms
          * 'text' column
             Result will be saved in dataset.data
         """
@@ -125,8 +129,8 @@ class DataLoader:
         dataset.data['group_label'] = dataset.data.target_groups.map(self.assign_label)
 
         # Assign group categories to instances
-        dataset.data['categories'] = dataset.data.target_groups.map(self.assign_categories)
-        dataset.data = get_dummy_columns(dataset.data, 'categories', exclude=['other'])
+        dataset.data['target_categories'] = dataset.data.target_groups.map(self.assign_categories)
+        dataset.data = get_dummy_columns(dataset.data, 'target_categories', exclude=['other'])
 
         # Drop nans in text column
         dataset.data = dataset.data.dropna(subset=['text'], how='any')
@@ -180,7 +184,7 @@ class DataLoader:
         #dataset.data = pd.read_csv(path, index_col=0, converters={'target_groups': literal_eval})
         dataset.data = pd.read_csv(path, index_col=0, low_memory=False)
         dataset.data['target_groups'] = dataset.data.target_groups.map(literal_eval)
-        dataset.data['identity_categories'] = dataset.data.identity_categories.map(literal_eval)
+        dataset.data['target_categories'] = dataset.data.target_categories.map(literal_eval)
 
 
 class Kennedy2020Loader(DataLoader):
@@ -188,7 +192,7 @@ class Kennedy2020Loader(DataLoader):
 
     def load(self, dataset):
         """ Load/download data """
-        print("Loading kennedy2020...")
+        print("\tLoading kennedy2020...")
         with redirect_stderr(io.StringIO()) as f:
             data = datasets.load_dataset(*dataset.load_paths)['train'].to_pandas()
 
@@ -234,7 +238,7 @@ class CadLoader(DataLoader):
     """ Contextual Abuse Dataset (CAD) """
 
     def load(self, dataset):
-        print("Loading cad...")
+        print("\tLoading cad...")
         csvpath = os.path.join(dataset.dirpath, dataset.load_paths[0])
         dataset.data = pd.read_csv(csvpath, sep='\t', index_col=0) # type: ignore
     
@@ -263,7 +267,7 @@ class HatexplainLoader(DataLoader):
     """ HateXplain dataset """
 
     def load(self, dataset):
-        print(f"Loading {dataset.name}...")
+        print(f"\tLoading {dataset.name}...")
         lines = []
         fpath = os.path.join(dataset.dirpath, dataset.load_paths[0])
         with open(fpath) as f:
@@ -286,7 +290,7 @@ class Elsherief2021Loader(DataLoader):
     """ Load and process ElSherief+2021 """
 
     def load(self, dataset):
-        print("Loading elsherief2021...")
+        print("\tLoading elsherief2021...")
         ## Load those annotated with target (implicit hate)
         implicit_targeted = pd.read_csv(os.path.join(dataset.dirpath, dataset.load_paths[0]), sep='\t')
         ## Load stage 1 annotations, get instances not labeled hateful
@@ -312,7 +316,7 @@ class SbicLoader(DataLoader):
     """ Social Bias Inference Corpus """
     
     def load(self, dataset):
-        print("Loading sbic...")
+        print("\tLoading sbic...")
         folds = []
         # Combine training, dev and test sets
         for fname in dataset.load_paths:
@@ -368,8 +372,7 @@ class CivilcommentsLoader(DataLoader):
 
     def extract_target_groups(self, dataset):
         """ Extract target groups column """
-        target_cols = dataset.data.columns[dataset.data.columns.tolist().index('male'):-2]
-        pdb.set_trace() # TODO: check for 'identity_annotator_count' column
+        target_cols = dataset.data.columns[dataset.data.columns.tolist().index('male'):-3]
         exclude_cols = ['other_religion', 'other_race_or_ethnicity']
         target_cols = [el for el in target_cols if el not in exclude_cols]
 

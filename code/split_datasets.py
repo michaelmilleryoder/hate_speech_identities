@@ -140,18 +140,19 @@ class ComparisonSplits():
         """
 
         exp_criteria_list = []
-        for removal_group in removal_groups:
-            if self.removal_group == 'hegemonic':
+        for removal_group in self.removal_groups:
+            if removal_group == 'hegemonic':
                 exp_criteria_list.append('group_label == "hegemonic"')
             else:
-                exp_criteria_list.append(f'identity_categories_{self.removal_group}')
+                exp_criteria_list.append(f'target_category_{removal_group}')
         exp_criteria = 'and'.join(exp_criteria_list)
+        control_criteria = 'and'.join([f'control_{removal_group}' for removal_group in self.removal_groups])
         pdb.set_trace() # check criteria
 
         for dataset in tqdm(self.datasets):
             split_criteria = {
                 'expsplits': exp_criteria,
-                'controlsplits': f'control_{remove_group}'
+                'controlsplits': control_criteria
             }
             self.create_splits(split_criteria, dataset)
             
@@ -162,14 +163,15 @@ class ComparisonSplits():
         self.save_splits()
         print("Saved comparison splits")
 
-    def load_heg_control(self):
-        """ Load heg and control dataset splits """
+    def load_splits(self):
+        """ Load experimental and control dataset splits """
         for dataset_name, splits in self.splits.items():
             # Load csv
-            if os.path.exists('/storage2/mamille3/data/hate_speech'):
-                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed'
-            else:
-                dataset_path = f'/usr0/home/mamille3/data/hate_speech/{dataset_name}/processed'
+            base_dirpath = '/storage2/mamille3/data/hate_speech'
+            if not os.path.exists(base_dirpath):
+                base_dirpath = '/home/mamille3/data/hate_speech'
+                assert os.path.exists(base_dirpath)
+            dataset_path = os.path.join(base_dirpath, dataset_name, 'processed', "_".join(self.removal_groups)) 
             for splits_name in splits:
                 for split_name in ['with_special', 'no_special']:
                     csvpath = os.path.join(dataset_path, f'{dataset_name}_{self.hate_ratio}hate_{splits_name}_{split_name}.csv')
@@ -195,10 +197,11 @@ class ComparisonSplits():
         """ Save out splits """
         for dataset_name, splits in self.splits.items():
             # Save out csvs
-            if os.path.exists('/storage2/mamille3/data/hate_speech'):
-                dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset_name}/processed/{"_".join(self.removal_groups)}'
-            else:
-                dataset_path = f'/home/mamille3/data/hate_speech/{dataset_name}/processed/{"_".join(self.removal_groups)}'
+            base_dirpath = '/storage2/mamille3/data/hate_speech'
+            if not os.path.exists(base_dirpath):
+                base_dirpath = '/home/mamille3/data/hate_speech'
+                assert os.path.exists(base_dirpath)
+            dataset_path = os.path.join(base_dirpath, dataset_name, 'processed', "_".join(self.removal_groups)) 
             if not os.path.exists(dataset_path):
                 os.makedirs(dataset_path)
             for splits_name, s in splits.items():

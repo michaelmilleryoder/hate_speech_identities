@@ -70,7 +70,7 @@ class DatasetsLoader:
         """
 
         eg_data = self.datasets[0].data
-        removal_groups = ['hegemonic'] + [col[len('identity_categories_'):] for col in eg_data.columns if col.startswith('identity_categories_')]
+        removal_groups = ['hegemonic'] + [col[len('target_category_'):] for col in eg_data.columns if col.startswith('target_category_')]
         
         # Get frequncies of normalized labels across datasets
         group_targets = [] # target_group, group_label, dataset, count
@@ -84,12 +84,12 @@ class DatasetsLoader:
 
         for removal_group in removal_groups:
             # used to restrict hegemonic control terms to just be marginalized (instead of any other)
-            if self.removal_group == 'hegemonic':
+            if removal_group == 'hegemonic':
                 criteria = 'group_label == "hegemonic"'
                 removal_col = 'group_label'
             else:
-                criteria = f'identity_categories_{self.removal_group}'
-                removal_col = f'identity_categories_{self.removal_group}'
+                criteria = f'target_category_{removal_group}'
+                removal_col = f'target_category_{removal_group}'
 
             ## Get distributions of counts over datasets for normalized labels
             removal_targets = target_dataset_counts.query(criteria)
@@ -115,16 +115,16 @@ class DatasetsLoader:
 
             # Save control terms out
             outpath = f'../resources/control_identity_terms_{removal_group}.txt'
-            print("Control terms:")
+            print(f"Control terms for {removal_group}:")
             with open(outpath, 'w') as f:
                 for term in control_terms:
                     print(f'\t{term}')
                     f.write(f'{term}\n')
         
             # Check counts across datasets for heg and control
-            print("Removal counts compared with control counts")
-            print(removal_counts.sum())
-            print(removal_counts.sum().sum())
-            print()
-            print(nonremoval_counts.loc[control_terms].sum())
-            print(nonremoval_counts.loc[control_terms].sum().sum())
+            #print("Removal counts compared with control counts")
+            #print(removal_counts.sum())
+            #print(removal_counts.sum().sum())
+            #print()
+            #print(nonremoval_counts.loc[control_terms].sum())
+            #print(nonremoval_counts.loc[control_terms].sum().sum())
