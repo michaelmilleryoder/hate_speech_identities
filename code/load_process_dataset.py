@@ -152,7 +152,7 @@ class DataLoader:
         for path in control_paths:
             with open(path, 'r') as f:
                 control_terms = f.read().splitlines()
-            removal_group = path.split('_')[-1].split('.')[0]
+            removal_group = path[len('control_identity_terms_'):].split('.')[0]
 
             # Control group column
             dataset.data[f'control_{removal_group}'] = dataset.data.target_groups.map(lambda targets: any(t in control_terms for t in targets) if isinstance(targets, list) else False)

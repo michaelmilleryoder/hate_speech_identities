@@ -66,29 +66,31 @@ class ComparisonSplits():
                 print()
     
     def sample_to_ratio(self, data, criteria, n_samples=None, n_special=None):
-        """ Sample to a specific hate ratio 
+        """ Create splits with and without data that matches critieria.
+            Sample to a specific hate ratio for each split and make the splits as similar as possible.
             Can also provide a n_samples dictionary with prescribed number of hate and non-hate instances to sample
         """
         # Remove instances by criteria
+        pdb.set_trace()
         special = data.query(criteria)
         no_special = data.loc[~data.index.isin(special.index)]
         
-        # Desired sampling of non-hate. Keep all hate rows (for no_special since that's the smallest set)
+        # Desired sampling of non-hate. Keep all hate rows (for no_special since that's smaller than with_special)
         n_hate = no_special.hate.sum()
         if n_samples is None:
             n_samples = {
                 True: n_hate,
-                False: int((n_hate*(1-self.hate_ratio))/self.hate_ratio)
+                False: int((n_hate*(1-self.hate_ratio))/self.hate_ratio) # enough non-hate to get to the right ratio
             }
         
         resampled_no_special = no_special.groupby('hate').apply(lambda x: flexible_sample(x, n_samples[x.name]))
         resampled_no_special.index = resampled_no_special.index.droplevel('hate')
         resampled_no_special = resampled_no_special.sample(frac=1, random_state=9)
 
-        # Sample corresponding with_split dataset
-        # Want to preserve all the hegemonic/control (special) instances (hate or non-hate) for maximum differences between datasets.
+        # Sample corresponding with_special dataset
+        # Want to make this exactly the same as no_special, but with special instances replacing others
+        # Preserve all the special instances (hate or non-hate) for maximum differences with no_special
         # So take them out first, then add them back in
-        # Want to make this exactly the same as no_split, but with hegemonic/control (special) instances replacing others
         special_hate = special.query('hate')
         special_nonhate = special.query('not hate')
         if n_special is not None:
@@ -98,11 +100,10 @@ class ComparisonSplits():
             n_special_hate = len(special_hate)
             n_special_nonhate = int(len(special_nonhate)/len(data.query('not hate')) * n_samples[False]) # match ratio overall in the dataset
         n_nonhate = len(resampled_no_special.query('not hate'))
-        pdb.set_trace()
         resampled_with_special = pd.concat([
-            resampled_no_special.query('hate').sample(n_samples[True]-n_special_hate), 
+            resampled_no_special.query('hate').sample(max(n_samples[True]-n_special_hate, 0)), # 0 means with_special hate will be all special
             special_hate,
-            resampled_no_special.query('not hate').sample(n_samples[False] - n_special_nonhate),
+            resampled_no_special.query('not hate').sample(max(n_samples[False] - n_special_nonhate, 0)),
             flexible_sample(special_nonhate, n_special_nonhate)
             ], axis=0)
         resampled_with_special = resampled_with_special.sample(frac=1, random_state=9)
