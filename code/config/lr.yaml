@@ -9,7 +9,7 @@ classifier:
 removal_comparison:
   run: True
   removal_groups: ['race_ethnicity']
-  create_splits: True # create comparison splits
+  create_splits: False # create comparison splits
   cv_runs: 5
 
 pca:

@@ -142,7 +142,7 @@ class RemovalComparison:
             if not os.path.exists(out_dirpath):
                 os.mkdir(out_dirpath)
             outstr = os.path.join(out_dirpath, f'{"_".join(self.removal_groups)}_{clf_name}_{self.cv_runs}x2cv_')
-            f1_df.to_csv(outstr + '_f1.csv')
+            f1_df.to_csv(outstr + 'f1.csv')
             sigs_df.to_csv(outstr + 'sig.csv')
 
             print(f1_df)
