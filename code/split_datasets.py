@@ -71,7 +71,6 @@ class ComparisonSplits():
             Can also provide a n_samples dictionary with prescribed number of hate and non-hate instances to sample
         """
         # Remove instances by criteria
-        pdb.set_trace()
         special = data.query(criteria)
         no_special = data.loc[~data.index.isin(special.index)]
         

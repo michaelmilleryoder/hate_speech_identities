@@ -71,6 +71,7 @@ class DatasetsLoader:
 
         eg_data = self.datasets[0].data
         removal_groups = ['hegemonic'] + [col[len('target_category_'):] for col in eg_data.columns if col.startswith('target_category_')]
+        # Note: I could just remove identities specified in the config file instead of all of them as is done here
         
         # Get frequncies of normalized labels across datasets
         group_targets = [] # target_group, group_label, dataset, count

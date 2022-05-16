@@ -1,3 +1,4 @@
+import os
 import pickle
 import pdb
 
@@ -137,7 +138,10 @@ class RemovalComparison:
             sigs_df = pd.DataFrame(sigs)
             #with open(f'../tmp/{clf_name}_{self.cv_runs}x2cv_scores.pkl', 'wb') as f:
             #    pickle.dump(scores, f)
-            outstr = 'f../output/removal_comparison/{"_".join(self.removal_groups)}_{clf_name}_{self.cv_runs}x2cv_'
+            out_dirpath = '../output/removal_comparison'
+            if not os.path.exists(out_dirpath):
+                os.mkdir(out_dirpath)
+            outstr = os.path.join(out_dirpath, f'{"_".join(self.removal_groups)}_{clf_name}_{self.cv_runs}x2cv_')
             f1_df.to_csv(outstr + '_f1.csv')
             sigs_df.to_csv(outstr + 'sig.csv')
 
