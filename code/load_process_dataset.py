@@ -22,24 +22,40 @@ tqdm.pandas()
 from sklearn.preprocessing import MultiLabelBinarizer
 
 
-def get_dummy_columns(data, colname, exclude=None):
+def dummy_colname(split_colname, value):
+    """ Transform and combine a column name and value to a good column name 
+        Used by get_dummy_columns
+        Args:
+            split_colname: the name of the original column which is being split into indicator columns
+            value: the value, to be a suffix of the new indicator column
+    """
+    name_transform = {'target_categories': 'target_category', 
+                        'identity_categories': 'identity_category',
+                     }
+    # Would be more efficient not to define this dict every time probably
+
+    return f'{name_transform.get(split_colname, split_colname)}_{value.replace("/", "_")}'
+
+
+def get_dummy_columns(data, colname, exclude=None, include=None):
     """ Create boolean columns for each value in a column 
         Args:
             data: the dataframe to manipulate
             colname: the name of the list column whose values will become boolean columns
             exclude: values to exclude
+            include: values to include, even if they are not present in the column being split
         Returns new dataframe with the columns
     """
-    name_transform = {'target_categories': 'target_category', 
-                        'identity_categories': 'identity_category',
-                     }
     mlb = MultiLabelBinarizer()
     dummy_cols = pd.DataFrame(mlb.fit_transform(data[colname]), 
-            columns=[f'{name_transform.get(colname, colname)}_{val.replace("/", "_")}' for val in mlb.classes_],
+            columns=[dummy_colname(colname, val) for val in mlb.classes_],
             index=data.index).astype(bool)
     if exclude is not None:
-        dummy_cols.drop(columns=[f'{name_transform.get(colname, colname)}_{exclude_val}' for exclude_val in exclude], 
+        dummy_cols.drop(columns=[dummy_colname(colname, exclude_val) for exclude_val in exclude], 
                 errors='ignore', inplace=True)
+    if include is not None:
+        include_vals = [include_val for include_val in include if dummy_colname(colname, include_val) not in dummy_cols.columns]
+        dummy_cols = dummy_cols.assign(**{include_val: False for include_val in include_vals})
     data = pd.concat([data, dummy_cols], axis=1)
     return data
 
@@ -132,7 +148,8 @@ class DataLoader:
 
         # Assign group categories to instances
         dataset.data['target_categories'] = dataset.data.target_groups.map(self.assign_categories)
-        dataset.data = get_dummy_columns(dataset.data, 'target_categories', exclude=['other'])
+        dataset.data = get_dummy_columns(dataset.data, 'target_categories', 
+                exclude=['other'], include=['race_ethnicity', 'religion', 'gender', 'sexuality'])
 
         # Drop nans in text column
         dataset.data = dataset.data.dropna(subset=['text'], how='any')

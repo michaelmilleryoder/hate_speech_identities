@@ -1,6 +1,6 @@
 ---
 load_datasets: True # load raw or processed datasets instead of task-specific splits
-reprocess_datasets: False # hate/non-hate ratio to sample each dataset
+reprocess_datasets: True # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
 classifier: 
   name: 'lr'
@@ -8,8 +8,8 @@ classifier:
 
 removal_comparison:
   run: True
-  removal_groups: ['race_ethnicity']
-  create_splits: False # create comparison splits
+  removal_groups: ['gender', 'sexuality']
+  create_splits: True # create comparison splits
   cv_runs: 5
 
 pca:

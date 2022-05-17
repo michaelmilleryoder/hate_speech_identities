@@ -117,24 +117,6 @@ class ComparisonSplits():
                 n_samples,
                 (n_special_hate, n_special_nonhate))
 
-    #def create_heg_control(self):
-    #    """ Create heg and control dataset splits """
-
-    #    for dataset in tqdm(self.datasets):
-    #        # Heg split
-    #        split_criteria = {
-    #            'hegsplits': 'group_label == "hegemonic"',
-    #            'controlsplits': 'in_control'
-    #        }
-    #        self.create_splits(split_criteria, dataset)
-    #        
-    #    # Get stats
-    #    self.get_stats()
-
-    #     # Save out
-    #    self.save_splits()
-    #    print("Saved comparison splits")
-
     def create_exp_control_splits(self):
         """ Create splits for comparing removing an 'experimental group' (like hegemonic target identities) 
             with a 'control' of random target identities removed 
@@ -146,14 +128,16 @@ class ComparisonSplits():
                 exp_criteria_list.append('group_label == "hegemonic"')
             else:
                 exp_criteria_list.append(f'target_category_{removal_group}')
-        exp_criteria = 'and'.join(exp_criteria_list)
-        control_criteria = 'and'.join([f'control_{removal_group}' for removal_group in self.removal_groups])
+        exp_criteria = ' and '.join(exp_criteria_list)
+        control_criteria = ' and '.join([f'control_{removal_group}' for removal_group in self.removal_groups])
 
         for dataset in tqdm(self.datasets):
             split_criteria = {
                 'expsplits': exp_criteria,
                 'controlsplits': control_criteria
             }
+            if 'target_category_gender' not in dataset.data.columns:
+                pdb.set_trace()
             self.create_splits(split_criteria, dataset)
             
         # Get stats
