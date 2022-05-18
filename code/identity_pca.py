@@ -18,13 +18,17 @@ from bert_classifier import BertClassifier
 from lr_classifier import LogisticRegressionClassifier
 
 
-class IdentityPCA:
+class CrossDatasetExperiment:
+    """ Test generalizability of hate speech performance training on one category and testing on others 
+        Also can run a PCA of the resulting train/test matrix
+    """
 
-    def __init__(self, processed_datasets, clf_name, clf_settings, combine: bool = False, 
+    def __init__(self, grouping, processed_datasets, clf_name, clf_settings, combine: bool = True, 
             create_datasets = False, 
             hate_ratio: float = 0.3, 
             incremental: bool = False):
         """ Args:
+                grouping: string name of grouping type {identities, categories, power}
                 clf_name: {bert, lr}
                 clf_settings: dictionary of settings for the classifier
                 create_datasets: whether to recreate both separate and combined datasets. 
@@ -32,6 +36,7 @@ class IdentityPCA:
                 combine: whether to combine identity datasets across dataset sources
                 incremental: whether to calculate PCA and save out results incrementally
         """
+        self.grouping = grouping
         self.processed_datasets = processed_datasets
         self.clf_name = clf_name
         self.clf_settings = clf_settings
@@ -44,6 +49,7 @@ class IdentityPCA:
         self.combined_identity_datasets = None
         self.scores = []
         self.group_labels = None
+        self.identity_categories = None
         self.reduced = None
         self.ic = None # IdentityDatasetCreator
 
@@ -71,12 +77,15 @@ class IdentityPCA:
         """ Test if there are any sets of datasets that could be combined uniformly to have enough
             hate against hegemonic categories to plot a PCA combined by identity group """
 
-        self.load_group_labels()
+        self.load_resources()
 
         dfs = [self.expanded_datasets[name].query('hate')[['target_groups', 'identity_group']] for name in sorted(self.expanded_datasets)]
         combined = pd.concat(dfs, keys=sorted(self.expanded_datasets.keys()), names=['dataset', 'text_id']).reset_index(level='dataset')
-        combined['group_label'] = combined['identity_group'].map(self.group_labels.get)
-        heg_counts = combined.query('group_label == "hegemonic"').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', 'group_label'], ascending=False).drop(columns='group_label').rename(columns={'target_groups': 'instance_count'})
+
+        # Make sure you have a minimum number of instances for the smallest set in that dimension
+        if self.grouping == 'power':
+            combined['group_label'] = combined['identity_group'].map(self.group_labels.get)
+            heg_counts = combined.query('group_label == "hegemonic"').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', 'group_label'], ascending=False).drop(columns='group_label').rename(columns={'target_groups': 'instance_count'})
 
         dataset_names = self.expanded_datasets.keys()
         n_datasets_range = range(3, 7)
@@ -186,12 +195,18 @@ class IdentityPCA:
         self.scores.to_csv(scores_outpath)
         tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
 
-    def load_group_labels(self):
-        """ Load group labels"""
+    def load_resources(self):
+        """ Load resources such as group labels, category labels"""
         if self.group_labels is None:
             path = '../resources/group_labels.json'
             with open(path, 'r') as f:
                 self.group_labels = json.load(f) 
+
+        # Load group categories dict
+        if self.identity_categories is None:
+            identity_categories_path = '../resources/identity_categories.json'
+            with open(identity_categories_path, 'r') as f:
+                self.identity_categories = json.load(f) 
     
     def run_pca(self):
         """ Run PCA over self.scores """
