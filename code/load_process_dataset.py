@@ -55,7 +55,7 @@ def get_dummy_columns(data, colname, exclude=None, include=None):
                 errors='ignore', inplace=True)
     if include is not None:
         include_vals = [include_val for include_val in include if dummy_colname(colname, include_val) not in dummy_cols.columns]
-        dummy_cols = dummy_cols.assign(**{include_val: False for include_val in include_vals})
+        dummy_cols = dummy_cols.assign(**{dummy_colname(colname, include_val): False for include_val in include_vals})
     data = pd.concat([data, dummy_cols], axis=1)
     return data
 

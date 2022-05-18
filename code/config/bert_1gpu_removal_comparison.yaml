@@ -8,8 +8,9 @@ classifier:
     n_gpus: 1
     gpu_ids: [1] # list of ids or 'all'
 
-heg_comparison:
+removal_comparison:
   run: True
+  removal_groups: ['race_ethnicity'] # List, like ['race_ethnicity', 'religion']
   create_splits: False # create comparison splits
   cv_runs: 5
 
