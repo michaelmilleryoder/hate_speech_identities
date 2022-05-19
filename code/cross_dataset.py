@@ -84,8 +84,14 @@ class CrossDatasetExperiment:
 
         # Make sure you have a minimum number of instances for the smallest set in that dimension
         if self.grouping == 'power':
-            combined['group_label'] = combined['identity_group'].map(self.group_labels.get)
-            heg_counts = combined.query('group_label == "hegemonic"').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', 'group_label'], ascending=False).drop(columns='group_label').rename(columns={'target_groups': 'instance_count'})
+            smallest_group = 'hegemonic'
+            colname = 'group_label'
+            resource = self.group_labels
+        elif self.grouping == 'categories':
+            important_groups = [['race_ethnicity'], ['religion'], ['gender', 'sexuality']]
+
+        combined[colname] = combined['identity_group'].map(resource.get)
+        smallest_counts = combined.query('@colname == @smallest_group').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', colname], ascending=False).drop(columns=colname).rename(columns={'target_groups': 'instance_count'})
 
         dataset_names = self.expanded_datasets.keys()
         n_datasets_range = range(3, 7)
@@ -93,7 +99,7 @@ class CrossDatasetExperiment:
         for i in n_datasets_range:
             combos.extend(list(itertools.combinations(dataset_names, i)))
 
-        min_hegemonic_categories = 3
+        min_smallest_identities = 3 # min number of identities to be present in the smallest group
         min_combined_instances = 900
         max_oversample = 2 # maximum multiplier for oversampling small datasets
         possible_dataset_combos = set()
@@ -102,12 +108,12 @@ class CrossDatasetExperiment:
         viable = {}
 
         for datasets in list(combos):
-            selected = heg_counts.loc[heg_counts.index.get_level_values('dataset').isin(datasets)]
+            selected = smallest_counts.loc[smallest_counts.index.get_level_values('dataset').isin(datasets)]
             counts = selected.groupby(selected.index.get_level_values('identity_group')).count()
             
-            # Count how many hegemonic categories these datasets would cover
+            # Count how many identities from the smallest group would be present in these datasets
             avail_counts = counts[counts['instance_count']==len(datasets)]
-            if len(avail_counts) >= min_hegemonic_categories:
+            if len(avail_counts) >= min_smallest_identities:
                 possible_dataset_combos.add(datasets)
                 possible_combined = selected[selected.index.get_level_values('identity_group').isin(avail_counts.index)]
 
@@ -117,15 +123,15 @@ class CrossDatasetExperiment:
                     {'instance_count': lambda x: min(x) * max_oversample * len(datasets)})
                 combo_counts[datasets] = combined_count
                 viable_combined = combined_count[combined_count['instance_count']>=min_combined_instances]
-                if len(viable_combined) >= min_hegemonic_categories - 1:
-                    potential[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_hegemonic_categories]
-                if len(viable_combined) >= min_hegemonic_categories:
-                    viable[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_hegemonic_categories]
+                if len(viable_combined) >= min_smallest_identities - 1:
+                    potential[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_smallest_identities]
+                if len(viable_combined) >= min_smallest_identities:
+                    viable[datasets] = combined_count.sort_values('instance_count', ascending=False).iloc[:min_smallest_identities]
 
         if len(viable) > 0:
             print(viable)
         else:
-            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_hegemonic_categories} identities (up to {max_oversample}x oversampled)")
+            print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_smallest_identities} identities (up to {max_oversample}x oversampled)")
             print(f"Closest is {potential}")
 
         return viable, potential
