@@ -20,7 +20,7 @@ from data import Dataset
 from split_datasets import ComparisonSplits
 from removal_comparison import RemovalComparison
 from load_process_datasets import DatasetsLoader
-from identity_pca import IdentityPCA
+from cross_dataset import CrossDatasetExperiment
 
 
 def main():
@@ -51,13 +51,16 @@ def main():
         removal_comparison.run(config['classifier']['name'], config['classifier']['settings'])
 
     # Run identity split PCA
-    if config['pca']['run']:
-        identity_pca = IdentityPCA(datasets, config['classifier']['name'], config['classifier']['settings'],
-            create_datasets=config['pca']['create_identity_datasets'], 
+    if config['cross_dataset']['run']:
+        cross_dataset = CrossDatasetExperiment(datasets, 
+            config['cross_dataset']['grouping'],
+            config['classifier']['name'], 
+            config['classifier']['settings'],
+            create_datasets=config['cross_dataset']['create_identity_datasets'], 
             hate_ratio=config['hate_ratio'], 
-            combine=config['pca']['combine_datasets'],
-            incremental=config['pca']['incremental'])
-        identity_pca.run()
+            combine=config['cross_dataset']['combine_datasets'],
+            incremental=config['cross_dataset']['incremental'])
+        cross_dataset.run()
 
 
 if __name__ == '__main__':

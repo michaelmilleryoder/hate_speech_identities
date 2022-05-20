@@ -62,11 +62,12 @@ class CrossDatasetExperiment:
         viable, potential = self.test_combined()
         if self.combine:
             if len(viable) == 0:
-                n_instances = [df.instance_count.sum() for df in list(potential.values())]
-                selected_datasets = list(potential.keys())[n_instances.index(max(n_instances))]
+                selected = potential
             else:
-                n_instances = [df.instance_count.sum() for df in list(viable.values())]
-                selected_datasets = list(viable.keys())[n_instances.index(max(n_instances))]
+                selected = viable
+            n_instances = [df.instance_count.sum() for df in list(selected.values())]
+            selected_datasets = list(selected.keys())[n_instances.index(max(n_instances))]
+            pdb.set_trace() # make sure of selected datasets
             self.load_combined_identity_datasets(selected_datasets)
 
         # Run cross-dataset predictions and run PCA
@@ -89,8 +90,17 @@ class CrossDatasetExperiment:
             resource = self.group_labels
         elif self.grouping == 'categories':
             important_groups = [['race_ethnicity'], ['religion'], ['gender', 'sexuality']]
+            colname = 'identity_category'
+            resource = self.identity_categories
 
         combined[colname] = combined['identity_group'].map(resource.get)
+        if self.grouping == 'categories': # TODO: better way of combining this
+            combined['flattened'] = combined[colname].map(lambda x: [cat for cats in cat_list for cat in cats])        
+            combined = combined.explode('flattened').rename(columns={'flattened': colname})
+            group_counts = combined.groupby(colname).count()
+            counts = {tuple(cats): group_counts[group_counts.isin(cats)].sum() for cats in important_groups}
+            smallest_group = min(counts, key=counts.get)
+
         smallest_counts = combined.query('@colname == @smallest_group').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', colname], ascending=False).drop(columns=colname).rename(columns={'target_groups': 'instance_count'})
 
         dataset_names = self.expanded_datasets.keys()
