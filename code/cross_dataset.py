@@ -95,7 +95,7 @@ class CrossDatasetExperiment:
 
         combined[colname] = combined['identity_group'].map(resource.get)
         if self.grouping == 'categories': # TODO: better way of combining this
-            combined['flattened'] = combined[colname].map(lambda x: [cat for cats in cat_list for cat in cats])        
+            combined['flattened'] = combined[colname].map(lambda cat_list: [cat for cats in cat_list for cat in cats])        
             combined = combined.explode('flattened').rename(columns={'flattened': colname})
             group_counts = combined.groupby(colname).count()
             counts = {tuple(cats): group_counts[group_counts.isin(cats)].sum() for cats in important_groups}
@@ -159,7 +159,8 @@ class CrossDatasetExperiment:
                 selected_datasets: tuple of the names of datasets selected for the combinations
         """
         print("Creating/loading combined identity datasets...")
-        self.combined_identity_datasets = self.ic.create_combined_datasets(selected_datasets)
+        resources = {'power': self.group_labels, 'categories': self.identity_categories}
+        self.combined_identity_datasets = self.ic.create_combined_datasets(selected_datasets, self.grouping, resources)
 
     def cross_dataset_eval(self):
         """ Run cross-dataset predictions, save to self.scores """
@@ -227,7 +228,7 @@ class CrossDatasetExperiment:
     def run_pca(self):
         """ Run PCA over self.scores """
 
-        self.load_group_labels()
+        self.load_resources()
 
         pca = PCA(n_components=2)
         self.reduced = pca.fit_transform(self.scores.values)

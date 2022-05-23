@@ -34,7 +34,7 @@ def get_stats(data, identity):
         
 
 class IdentityDatasetCreator:
-    """ Create or load separate and/or combined identity datasets """
+    """ Create or load separate and/or combined datasets based on target identities (grouped into sets or not) """
     
     def __init__(self, processed_datasets, hate_ratio, create = True):
         """ Args:
@@ -59,6 +59,8 @@ class IdentityDatasetCreator:
         self.folds_path = f'../data/identity_splits_{self.hate_ratio}hate.pkl'
         self.combined_path = None
         self.expanded_path = f'../tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
+        self.grouping = None
+        self.resources = None
 
     def create_sep_datasets(self):
         """ Create and return identity datasets """
@@ -87,14 +89,18 @@ class IdentityDatasetCreator:
         with open(self.expanded_path, 'rb') as ep:
             self.expanded_datasets = pickle.load(ep)
 
-    def create_combined_datasets(self, selected_datasets):
+    def create_combined_datasets(self, selected_datasets, grouping, resources):
         """ Create and return combined identity datasets
             Args:
                 selected_datasets: tuple of the names of datasets selected for the combinations
+                grouping: string name of grouping type {identities, categories, power}
+                resources: dictionaries mapping groupings to identities
         """
         
         self.selected_datasets = selected_datasets
-        self.combined_path = f'../data/combined_identity_splits_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
+        self.grouping = grouping
+        self.resources = resources
+        self.combined_path = f'../data/combined_{self.grouping}_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
         if self.create:
             self.form_combined_datasets()
         else:
@@ -110,18 +116,26 @@ class IdentityDatasetCreator:
         # Could relax it
         identities = [identity for dataset, identity in filtered_dataset_identities]
         identities = [identity for identity in identities if identities.count(identity) == len(self.selected_datasets)] # selected identities above minimum threshold in all selected datasets
-        combined_identity_datasets = {} # identity: data
+        combined_identity_datasets = {} # identity/grouping: data
 
         # Could run sample_to_ratio on concatenated expanded datasets instead. 
         # Would then have to split into folds
         # Not sure if that would be better or not
-        for identity in identities:
-            self.combined_folds[identity] = {}
-            for fold in ['train', 'test']:
-                min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
-                self.combined_folds[identity][fold] = pd.concat(
-                    [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
-                get_stats(self.combined_folds[identity][fold], identity)
+        if self.grouping == 'identities':
+            groupings = [tuple(identity) for identity in identities]
+        elif self.grouping == 'categories':
+            groupings = [('race_ethnicity'), ('religion'), ('gender', 'sexuality')]
+        elif self.grouping == 'power':
+            groupings = [('hegemonic'), ('marginalized'), ('other')]
+        for grouping in groupings:
+            self.combined_folds[grouping] = {}
+            identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
+            for identity in identity_set:
+                for fold in ['train', 'test']:
+                    min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
+                    self.combined_folds[identity][fold] = pd.concat(
+                        [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
+                    get_stats(self.combined_folds[identity][fold], identity)
             
         # Save out
         self.save_combined_datasets()
