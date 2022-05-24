@@ -23,7 +23,7 @@ class CrossDatasetExperiment:
         Also can run a PCA of the resulting train/test matrix
     """
 
-    def __init__(self, grouping, processed_datasets, clf_name, clf_settings, combine: bool = True, 
+    def __init__(self, processed_datasets, grouping, clf_name, clf_settings, combine: bool = True, 
             create_datasets = False, 
             hate_ratio: float = 0.3, 
             incremental: bool = False):
@@ -32,7 +32,7 @@ class CrossDatasetExperiment:
                 clf_name: {bert, lr}
                 clf_settings: dictionary of settings for the classifier
                 create_datasets: whether to recreate both separate and combined datasets. 
-                    If False, will just load them
+                    If False, will just load them. Can also be a list of ['separate', 'combined']
                 combine: whether to combine identity datasets across dataset sources
                 incremental: whether to calculate PCA and save out results incrementally
         """
@@ -41,7 +41,7 @@ class CrossDatasetExperiment:
         self.clf_name = clf_name
         self.clf_settings = clf_settings
         self.combine = combine
-        self.create_datasets = create_datasets # False or list of either or both 'separate', 'combined'
+        self.create_datasets = create_datasets
         self.hate_ratio = hate_ratio
         self.incremental = incremental
         self.sep_identity_datasets = None # separate identity datasets
@@ -67,7 +67,6 @@ class CrossDatasetExperiment:
                 selected = viable
             n_instances = [df.instance_count.sum() for df in list(selected.values())]
             selected_datasets = list(selected.keys())[n_instances.index(max(n_instances))]
-            pdb.set_trace() # make sure of selected datasets
             self.load_combined_identity_datasets(selected_datasets)
 
         # Run cross-dataset predictions and run PCA
@@ -95,13 +94,16 @@ class CrossDatasetExperiment:
 
         combined[colname] = combined['identity_group'].map(resource.get)
         if self.grouping == 'categories': # TODO: better way of combining this
-            combined['flattened'] = combined[colname].map(lambda cat_list: [cat for cats in cat_list for cat in cats])        
-            combined = combined.explode('flattened').rename(columns={'flattened': colname})
-            group_counts = combined.groupby(colname).count()
-            counts = {tuple(cats): group_counts[group_counts.isin(cats)].sum() for cats in important_groups}
+            #combined['flattened'] = combined[colname].map(lambda cat_list: [] if cat_list is None else [cat for cats in cat_list for cat in cats])
+            #combined.drop(columns=colname, inplace=True)
+            #combined = combined.explode('flattened').rename(columns={'flattened': colname})
+            combined = combined.explode(colname)
+            group_counts = combined.groupby(colname)['dataset'].count()
+            group_counts.index = group_counts.index.str.replace('/', '_')
+            counts = {tuple(cats): group_counts[group_counts.index.isin(cats)].sum() for cats in important_groups}
             smallest_group = min(counts, key=counts.get)
 
-        smallest_counts = combined.query('@colname == @smallest_group').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', colname], ascending=False).drop(columns=colname).rename(columns={'target_groups': 'instance_count'})
+        smallest_counts = combined.query(f'{colname} == {smallest_group}').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', colname], ascending=False).drop(columns=colname).rename(columns={'target_groups': 'instance_count'})
 
         dataset_names = self.expanded_datasets.keys()
         n_datasets_range = range(3, 7)
@@ -235,17 +237,20 @@ class CrossDatasetExperiment:
         self.reduced = pd.DataFrame(self.reduced, index=self.scores.index)
 
         # Assign group labels to groups so can visualize colors
-        if self.combine:
-            self.reduced['group_label'] = self.reduced.index.map(lambda x: self.group_labels.get(x))
-        else:
-            self.reduced['group_label'] = self.reduced.index.map(lambda x: self.group_labels.get(x[1]))
+        if self.grouping == 'categories':
+            colname = 'identity_category'
+            resource = self.identity_categories
+        elif self.grouping ==  'identities':
+            colname = 'group_label'
+            resource = self.group_labels
+        self.reduced[colname] = self.reduced.index.map(lambda x: resource.get(x, [None])[0]) # choose first label
 
         # Plot
         if self.combine:
             title = f'Prediction weight PCA over combined identity datasets {self.ic.selected_datasets}'
         else:
             title = 'Prediction weight PCA over identities within datasets'
-        fig = px.scatter(self.reduced, x=0, y=1, color='group_label', 
+        fig = px.scatter(self.reduced, x=0, y=1, color=colname, 
             text=self.reduced.index, width=1000, height=800,
             title=title)
         fig.update_traces(marker={'size': 20})

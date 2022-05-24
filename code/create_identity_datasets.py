@@ -65,9 +65,10 @@ class IdentityDatasetCreator:
     def create_sep_datasets(self):
         """ Create and return identity datasets """
 
-        if self.create:
-            # Count, select which identities to group in datasets
-            self.dataset_identity_groups()
+        # Count, select which identities to group in datasets
+        self.dataset_identity_groups()
+
+        if isinstance(self.create, list) and 'separate' in self.create:
 
             # Expand datasets with annotations for identity groups 
             # (duplicate instances with multiple target identity groups)
@@ -101,7 +102,7 @@ class IdentityDatasetCreator:
         self.grouping = grouping
         self.resources = resources
         self.combined_path = f'../data/combined_{self.grouping}_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
-        if self.create:
+        if isinstance(self.create, list) and 'combined' in self.create:
             self.form_combined_datasets()
         else:
             self.load_combined_datasets()
@@ -115,7 +116,7 @@ class IdentityDatasetCreator:
         # this only selects identities with a threshold minimum of hate for each identity in each dataset. 
         # Could relax it
         identities = [identity for dataset, identity in filtered_dataset_identities]
-        identities = [identity for identity in identities if identities.count(identity) == len(self.selected_datasets)] # selected identities above minimum threshold in all selected datasets
+        identities = list({identity for identity in identities if identities.count(identity) == len(self.selected_datasets)}) # selected identities above minimum threshold in all selected datasets
         combined_identity_datasets = {} # identity/grouping: data
 
         # Could run sample_to_ratio on concatenated expanded datasets instead. 
@@ -124,18 +125,18 @@ class IdentityDatasetCreator:
         if self.grouping == 'identities':
             groupings = [tuple(identity) for identity in identities]
         elif self.grouping == 'categories':
-            groupings = [('race_ethnicity'), ('religion'), ('gender', 'sexuality')]
+            groupings = [('race/ethnicity',), ('religion',), ('gender', 'sexuality')]
         elif self.grouping == 'power':
-            groupings = [('hegemonic'), ('marginalized'), ('other')]
+            groupings = [('hegemonic',), ('marginalized',), ('other',)]
         for grouping in groupings:
             self.combined_folds[grouping] = {}
             identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
             for identity in identity_set:
                 for fold in ['train', 'test']:
                     min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
-                    self.combined_folds[identity][fold] = pd.concat(
+                    self.combined_folds[grouping][fold] = pd.concat(
                         [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
-                    get_stats(self.combined_folds[identity][fold], identity)
+                    #get_stats(self.combined_folds[grouping][fold], identity)
             
         # Save out
         self.save_combined_datasets()
@@ -183,7 +184,7 @@ class IdentityDatasetCreator:
         # Save out folds
         with open(self.folds_path, 'wb') as f:
             pickle.dump(self.folds, f)
-        print("Saved identity folds out")
+        print("Saved separate identity folds out")
             
         # Save out csv
         # dataset_path = f'/storage2/mamille3/data/hate_speech/{dataset}/processed'
@@ -200,7 +201,7 @@ class IdentityDatasetCreator:
     def save_combined_datasets(self):
         with open(self.combined_path, 'wb') as f:
             pickle.dump(self.combined_folds, f)
-        print(f"Saved combined {self.selected_datasets} identity folds out")
+        print(f"Saved combined {self.selected_datasets} identity folds out to {self.combined_path}")
 
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
@@ -256,6 +257,9 @@ class IdentityDatasetCreator:
         """ Expand datasets with annotations for identity groups 
             (duplicate instances with multiple target identity groups)
         """
+        if self.expanded_datasets is None:
+            self.expanded_datasets = {}
+
         # Select instances based on selected datasets and identity groups
         for dataset in tqdm(self.processed_datasets):
             tqdm.write(dataset.name)
