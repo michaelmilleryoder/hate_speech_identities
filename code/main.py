@@ -58,8 +58,7 @@ def main():
             config['classifier']['settings'],
             create_datasets=config['cross_dataset']['create_identity_datasets'], 
             hate_ratio=config['hate_ratio'], 
-            combine=config['cross_dataset']['combine_datasets'],
-            incremental=config['cross_dataset']['incremental'])
+            combine=config['cross_dataset']['combine_datasets'],)
         cross_dataset.run()
 
 

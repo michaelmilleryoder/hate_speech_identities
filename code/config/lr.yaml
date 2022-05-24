@@ -14,10 +14,10 @@ removal_comparison:
 
 cross_dataset:
   run: True
-  grouping: categories
-  create_identity_datasets: ['combined'] # False or list of either or both 'separate', 'combined'
+  grouping: power
+  create_identity_datasets: ['combined'] # False or list of either or both 'separate', 'combined'. 
+    # Need to load datasets even if this is False
   combine_datasets: True
-  incremental: False
 
 datasets:
   elsherief2021:

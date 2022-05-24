@@ -65,7 +65,7 @@ class IdentityDatasetCreator:
     def create_sep_datasets(self):
         """ Create and return identity datasets """
 
-        # Count, select which identities to group in datasets
+        # Count, select which identities to group in datasets (may need for loading, too)
         self.dataset_identity_groups()
 
         if isinstance(self.create, list) and 'separate' in self.create:
@@ -126,11 +126,14 @@ class IdentityDatasetCreator:
             groupings = [tuple(identity) for identity in identities]
         elif self.grouping == 'categories':
             groupings = [('race/ethnicity',), ('religion',), ('gender', 'sexuality')]
+            #possible_groupings = {tuple(sorted(self.resources[self.grouping][identity])) for identity in identities}
+            # ^ just used to figure out which combinations are possible
         elif self.grouping == 'power':
-            groupings = [('hegemonic',), ('marginalized',), ('other',)]
+            groupings = [('hegemonic',), ('marginalized',)]
         for grouping in groupings:
             self.combined_folds[grouping] = {}
             identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
+            assert len(identity_set) > 0
             for identity in identity_set:
                 for fold in ['train', 'test']:
                     min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
@@ -229,8 +232,6 @@ class IdentityDatasetCreator:
             ], axis=0)
         resampled = resampled.sample(frac=1, random_state=9)
 
-        if len(resampled) == 0:
-            pdb.set_trace()
         #get_stats(resampled, identity)
         return resampled
 

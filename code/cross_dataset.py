@@ -26,7 +26,7 @@ class CrossDatasetExperiment:
     def __init__(self, processed_datasets, grouping, clf_name, clf_settings, combine: bool = True, 
             create_datasets = False, 
             hate_ratio: float = 0.3, 
-            incremental: bool = False):
+            ):
         """ Args:
                 grouping: string name of grouping type {identities, categories, power}
                 clf_name: {bert, lr}
@@ -34,7 +34,6 @@ class CrossDatasetExperiment:
                 create_datasets: whether to recreate both separate and combined datasets. 
                     If False, will just load them. Can also be a list of ['separate', 'combined']
                 combine: whether to combine identity datasets across dataset sources
-                incremental: whether to calculate PCA and save out results incrementally
         """
         self.grouping = grouping
         self.processed_datasets = processed_datasets
@@ -43,7 +42,6 @@ class CrossDatasetExperiment:
         self.combine = combine
         self.create_datasets = create_datasets
         self.hate_ratio = hate_ratio
-        self.incremental = incremental
         self.sep_identity_datasets = None # separate identity datasets
         self.expanded_datasets = None
         self.combined_identity_datasets = None
@@ -84,7 +82,7 @@ class CrossDatasetExperiment:
 
         # Make sure you have a minimum number of instances for the smallest set in that dimension
         if self.grouping == 'power':
-            smallest_group = 'hegemonic'
+            smallest_group = '"hegemonic"'
             colname = 'group_label'
             resource = self.group_labels
         elif self.grouping == 'categories':
@@ -94,9 +92,6 @@ class CrossDatasetExperiment:
 
         combined[colname] = combined['identity_group'].map(resource.get)
         if self.grouping == 'categories': # TODO: better way of combining this
-            #combined['flattened'] = combined[colname].map(lambda cat_list: [] if cat_list is None else [cat for cats in cat_list for cat in cats])
-            #combined.drop(columns=colname, inplace=True)
-            #combined = combined.explode('flattened').rename(columns={'flattened': colname})
             combined = combined.explode(colname)
             group_counts = combined.groupby(colname)['dataset'].count()
             group_counts.index = group_counts.index.str.replace('/', '_')
@@ -146,6 +141,7 @@ class CrossDatasetExperiment:
             print(f"No combinations of datasets give >{min_combined_instances} instances of hate for >={min_smallest_identities} identities (up to {max_oversample}x oversampled)")
             print(f"Closest is {potential}")
 
+        assert len(viable) > 0 or len(potential) > 0
         return viable, potential
         
     def load_sep_identity_datasets(self):
@@ -184,10 +180,8 @@ class CrossDatasetExperiment:
                 clf = LogisticRegressionClassifier()
 
             # Check for NaNs
-            if folds['train']['text'].isnull().values.any():
-                pdb.set_trace()
-            if folds['test']['text'].isnull().values.any():
-                pdb.set_trace()
+            assert not folds['train']['text'].isnull().values.any()
+            assert not folds['test']['text'].isnull().values.any()
 
             # Train model 
             clf.train(folds['train'])
@@ -200,17 +194,8 @@ class CrossDatasetExperiment:
                 score_line[test_name] = test_scores.loc['f1-score', 'True']
             scores.append(score_line)
 
-            # Save out scores, run PCA incrementally
-            if self.incremental and len(scores) > 2:
-                self.scores = pd.DataFrame(scores).set_index('train_dataset')
-                if self.combine:
-                    scores_outpath = f'../output/combined_identity_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
-                    self.scores.to_csv(scores_outpath)
-                    tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
-                self.run_pca()
-                
         self.scores = pd.DataFrame(scores).set_index('train_dataset')
-        scores_outpath = f'../output/combined_identity_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
+        scores_outpath = f'../output/cross_dataset/combined_{self.grouping}_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
         self.scores.to_csv(scores_outpath)
         tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
 
@@ -237,13 +222,12 @@ class CrossDatasetExperiment:
         self.reduced = pd.DataFrame(self.reduced, index=self.scores.index)
 
         # Assign group labels to groups so can visualize colors
-        if self.grouping == 'categories':
-            colname = 'identity_category'
-            resource = self.identity_categories
-        elif self.grouping ==  'identities':
+        if self.grouping ==  'identities':
             colname = 'group_label'
             resource = self.group_labels
-        self.reduced[colname] = self.reduced.index.map(lambda x: resource.get(x, [None])[0]) # choose first label
+            self.reduced[colname] = self.reduced.index.map(lambda x: resource.get(x, [None])[0]) # choose first label
+        else:
+            colname = None
 
         # Plot
         if self.combine:
@@ -258,9 +242,9 @@ class CrossDatasetExperiment:
 
         # Save out
         if self.combine:
-            outname = f'combined_identity_{self.clf_name}_{"+".join(self.ic.selected_datasets)}_pca'
+            outname = f'combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}_pca'
         else:
-            outname = f'dataset_identity_{self.clf_name}_pca'
-        outpath = f'../output/{outname}.png'
+            outname = f'dataset_{self.grouping}_{self.clf_name}_pca'
+        outpath = f'../output/cross_dataset/{outname}.png'
         fig.write_image(outpath)
         tqdm.write(f"Saved dataset identity PCA to {outpath}")

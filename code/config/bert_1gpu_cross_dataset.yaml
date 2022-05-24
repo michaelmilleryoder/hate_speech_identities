@@ -1,5 +1,5 @@
 ---
-load_datasets: False # load raw or processed datasets instead of task-specific splits
+load_datasets: True # load raw or processed datasets instead of task-specific splits
 reprocess_datasets: False # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
 classifier:
@@ -8,16 +8,18 @@ classifier:
     n_gpus: 1
     gpu_ids: [0] # list of ids or 'all'
 
-heg_comparison:
+removal_comparison:
   run: False
+  removal_groups: ['gender', 'sexuality']
   create_splits: False # create comparison splits
   cv_runs: 5
 
-pca:
+cross_dataset:
   run: True
+  grouping: power
   create_identity_datasets: False # False or list of either or both 'separate', 'combined'
+    # Need to load datasets even if this is False
   combine_datasets: True
-  incremental: False
 
 datasets:
   elsherief2021:
