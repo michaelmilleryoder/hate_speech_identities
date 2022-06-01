@@ -240,11 +240,13 @@ class CrossDatasetExperiment:
         fig.update_traces(marker={'size': 20})
         fig.update_traces(textposition='top center')
 
-        # Save out
+        # Save out (PCA data and plot)
         if self.combine:
             outname = f'combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}_pca'
         else:
             outname = f'dataset_{self.grouping}_{self.clf_name}_pca'
-        outpath = f'../output/cross_dataset/{outname}.png'
-        fig.write_image(outpath)
+        reduced_outpath = f'../output/cross_dataset/{outname}.csv'
+        fig_outpath = f'../output/cross_dataset/{outname}.png'
+        self.reduced.to_csv(reduced_outpath)
+        fig.write_image(fig_outpath)
         tqdm.write(f"Saved dataset identity PCA to {outpath}")
