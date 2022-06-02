@@ -249,4 +249,4 @@ class CrossDatasetExperiment:
         fig_outpath = f'../output/cross_dataset/{outname}.png'
         self.reduced.to_csv(reduced_outpath)
         fig.write_image(fig_outpath)
-        tqdm.write(f"Saved dataset identity PCA to {outpath}")
+        tqdm.write(f"Saved dataset identity PCA to {fig_outpath}")

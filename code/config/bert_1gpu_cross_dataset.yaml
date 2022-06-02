@@ -6,7 +6,7 @@ classifier:
   name: 'bert'
   settings:
     n_gpus: 1
-    gpu_ids: [0] # list of ids or 'all'
+    gpu_ids: [1] # list of ids or 'all'
 
 removal_comparison:
   run: False
@@ -16,8 +16,8 @@ removal_comparison:
 
 cross_dataset:
   run: True
-  grouping: power
-  create_identity_datasets: False # False or list of either or both 'separate', 'combined'
+  grouping: categories # categories, power, identities
+  create_identity_datasets: ['combined'] # False or list of either or both 'separate', 'combined'
     # Need to load datasets even if this is False
   combine_datasets: True
 

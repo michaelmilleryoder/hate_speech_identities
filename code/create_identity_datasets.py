@@ -134,15 +134,62 @@ class IdentityDatasetCreator:
             self.combined_folds[grouping] = {}
             identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
             assert len(identity_set) > 0
-            for identity in identity_set:
-                for fold in ['train', 'test']:
-                    min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
-                    self.combined_folds[grouping][fold] = pd.concat(
-                        [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
-                    #get_stats(self.combined_folds[grouping][fold], identity)
+
+            for fold in ['train', 'test']:
+                combined_dataset_corpora = {}
+                for dataset in self.selected_datasets:
+                    combined_dataset_corpora[dataset] = pd.concat([self.folds[(dataset, identity)][fold] for identity in identity_set])
+                min_len = self.max_oversample * min(len(dataset_corpus) for dataset_corpus in combined_dataset_corpora.values())
+                max_size = max(len(dataset_corpus) for dataset_corpus in combined_dataset_corpora.values())
+                if min_len > max_size: # Make sure this isn't unnecessarily oversampling datasets if they are all similar sizes
+                    min_len == max_size
+                self.combined_folds[grouping][fold] = pd.concat(
+                    [flexible_sample(dataset_corpus, min_len) for dataset, dataset_corpus in combined_dataset_corpora.items()]).sample(frac=1, random_state=9)
+                #get_stats(self.combined_folds[grouping][fold], identity)
             
         # Save out
         self.save_combined_datasets()
+
+    #def form_combined_datasets_stratified(self):
+    #    """ Sample from selected datasets to combine them into grouping-based datasets (identity, category, power),
+    #        stratified by identity group (for word association analysis)
+    #    """
+    #    # TODO: possibly combine with form_combined_datasets
+
+    #    filtered_dataset_identities = [(dataset, identity) for dataset, identity in self.selected_dataset_groups if dataset in self.selected_datasets]
+    #    # this only selects identities with a threshold minimum of hate for each identity in each dataset. 
+    #    # Could relax it
+    #    identities = [identity for dataset, identity in filtered_dataset_identities]
+    #    identities = list({identity for identity in identities if identities.count(identity) == len(self.selected_datasets)}) # selected identities above minimum threshold in all selected datasets (gets identities plotted in PCA)
+    #    combined_identity_datasets = {} # identity/grouping: data
+
+    #    # Could run sample_to_ratio on concatenated expanded datasets instead. 
+    #    # Would then have to split into folds
+    #    # Not sure if that would be better or not
+    #    if self.grouping == 'identities':
+    #        groupings = [tuple(identity) for identity in identities]
+    #    elif self.grouping == 'categories':
+    #        groupings = [('race/ethnicity',), ('religion',), ('gender', 'sexuality')]
+    #        #possible_groupings = {tuple(sorted(self.resources[self.grouping][identity])) for identity in identities}
+    #        # ^ just used to figure out which combinations are possible
+    #    elif self.grouping == 'power':
+    #        groupings = [('hegemonic',), ('marginalized',)]
+    #    for grouping in groupings:
+    #        self.combined_folds[grouping] = {}
+    #        identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
+    #        assert len(identity_set) > 0
+    #    
+    #        # Calculate how much to sample from each identity in the set
+    #        all_identity = pd.concat(
+    #                [self.folds[(dataset, identity)][fold] for dataset, identity in self.folds if identity in identity_set])
+    #        for fold in ['train', 'test']:
+    #                #min_len = self.max_oversample * min(len(self.folds[(dataset, identity)][fold]) for dataset in self.selected_datasets)
+    #                self.combined_folds[grouping][fold] = pd.concat(
+    #                    [flexible_sample(self.folds[(dataset, identity)][fold], min_len) for dataset in self.selected_datasets]).sample(frac=1, random_state=9)
+    #                #get_stats(self.combined_folds[grouping][fold], identity)
+    #        
+    #    # Save out
+    #    self.save_combined_datasets()
 
     def load_combined_datasets(self):
         with open(self.combined_path, 'rb') as f:

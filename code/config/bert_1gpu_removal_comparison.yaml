@@ -1,5 +1,5 @@
 ---
-load_datasets: False # load raw or processed datasets instead of task-specific splits
+load_datasets: True # load raw or processed datasets instead of task-specific splits
 reprocess_datasets: False # hate/non-hate ratio to sample each dataset
 hate_ratio: 0.3
 classifier:
