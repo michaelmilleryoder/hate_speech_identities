@@ -132,7 +132,10 @@ class IdentityDatasetCreator:
             groupings = [('hegemonic',), ('marginalized',)]
         for grouping in groupings:
             self.combined_folds[grouping] = {}
-            identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
+            if self.grouping == 'identities':
+                identity_set = grouping
+            else:
+                identity_set = [identity for identity in identities if any([gp in self.resources[self.grouping][identity] for gp in grouping])]
             assert len(identity_set) > 0
 
             for fold in ['train', 'test']:

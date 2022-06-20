@@ -73,7 +73,7 @@ class CrossDatasetExperiment:
 
     def test_combined(self):
         """ Test if there are any sets of datasets that could be combined uniformly to have enough
-            hate against hegemonic categories to plot a PCA combined by identity group """
+            hate against smaller groupings to plot a PCA combined by identity group """
 
         self.load_resources()
 
@@ -81,22 +81,21 @@ class CrossDatasetExperiment:
         combined = pd.concat(dfs, keys=sorted(self.expanded_datasets.keys()), names=['dataset', 'text_id']).reset_index(level='dataset')
 
         # Make sure you have a minimum number of instances for the smallest set in that dimension
-        if self.grouping == 'power':
-            smallest_group = '"hegemonic"'
-            colname = 'group_label'
-            resource = self.group_labels
-        elif self.grouping == 'categories':
+        if self.grouping == 'categories':
             important_groups = [['race_ethnicity'], ['religion'], ['gender', 'sexuality']]
             colname = 'identity_category'
             resource = self.identity_categories
-
-        combined[colname] = combined['identity_group'].map(resource.get)
-        if self.grouping == 'categories': # TODO: better way of combining this
+            combined[colname] = combined['identity_group'].map(resource.get)
             combined = combined.explode(colname)
             group_counts = combined.groupby(colname)['dataset'].count()
             group_counts.index = group_counts.index.str.replace('/', '_')
             counts = {tuple(cats): group_counts[group_counts.index.isin(cats)].sum() for cats in important_groups}
             smallest_group = min(counts, key=counts.get)
+        else: # grouping is power or identities
+            smallest_group = '"hegemonic"'
+            colname = 'group_label'
+            resource = self.group_labels
+            combined[colname] = combined['identity_group'].map(resource.get)
 
         smallest_counts = combined.query(f'{colname} == {smallest_group}').groupby(['identity_group', 'dataset']).count().sort_values(['identity_group', colname], ascending=False).drop(columns=colname).rename(columns={'target_groups': 'instance_count'})
 

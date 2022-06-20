@@ -365,16 +365,15 @@ class SbicLoader(DataLoader):
                 if normed != '':
                     flattened.add(normed)
         # Combine 'men/women' -> people if both of these genders are present
-        if 'lesbian women' and 'gay men' in flattened:
+        if 'lesbian women' in flattened and 'gay men' in flattened:
             flattened.remove('lesbian women')
             flattened.remove('gay men')
             flattened.add('gay people')
         for term in ['bisexual', 'transgender']:
-            if f'{term} men' and f'{term} women' in flattened:
+            if f'{term} men' in flattened and f'{term} women' in flattened:
                 for gender in ['men', 'women']:
-                    flattened.remove('{term} {gender}')
-                flattened.add('{term} people')
-        pdb.set_trace()
+                    flattened.remove(f'{term} {gender}')
+                flattened.add(f'{term} people')
         return list(flattened)
         
 
