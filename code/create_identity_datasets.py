@@ -139,6 +139,7 @@ class IdentityDatasetCreator:
                 combined_dataset_corpora = {}
                 for dataset in self.selected_datasets:
                     combined_dataset_corpora[dataset] = pd.concat([self.folds[(dataset, identity)][fold] for identity in identity_set])
+                    combined_dataset_corpora[dataset]['dataset'] = dataset
                 min_len = self.max_oversample * min(len(dataset_corpus) for dataset_corpus in combined_dataset_corpora.values())
                 max_size = max(len(dataset_corpus) for dataset_corpus in combined_dataset_corpora.values())
                 if min_len > max_size: # Make sure this isn't unnecessarily oversampling datasets if they are all similar sizes
@@ -146,6 +147,7 @@ class IdentityDatasetCreator:
                 self.combined_folds[grouping][fold] = pd.concat(
                     [flexible_sample(dataset_corpus, min_len) for dataset, dataset_corpus in combined_dataset_corpora.items()]).sample(frac=1, random_state=9)
                 #get_stats(self.combined_folds[grouping][fold], identity)
+            self.combined_folds[grouping]['all'] = pd.concat(self.combined_folds[grouping].values())
             
         # Save out
         self.save_combined_datasets()

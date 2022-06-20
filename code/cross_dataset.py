@@ -191,6 +191,7 @@ class CrossDatasetExperiment:
             
             for test_name, test_folds in datasets.items():
                 test_scores, preds = clf.eval(test_folds['test'])
+                pdb.set_trace()
                 score_line[test_name] = test_scores.loc['f1-score', 'True']
             scores.append(score_line)
 
