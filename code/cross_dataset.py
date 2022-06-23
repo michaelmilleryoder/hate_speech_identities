@@ -169,7 +169,7 @@ class CrossDatasetExperiment:
         else:
             datasets = self.sep_identity_datasets
     
-        for name, folds in tqdm(datasets.items(), ncols=100):
+        for name, folds in tqdm(sorted(datasets.items()), ncols=100):
             tqdm.write(str(name))
             
             # Build classifier
@@ -190,7 +190,7 @@ class CrossDatasetExperiment:
             
             for test_name, test_folds in datasets.items():
                 test_scores, preds = clf.eval(test_folds['test'])
-                pdb.set_trace()
+                #score_line[test_name] = test_scores.loc['f1-score', 'weighted avg']
                 score_line[test_name] = test_scores.loc['f1-score', 'True']
             scores.append(score_line)
 
@@ -219,7 +219,7 @@ class CrossDatasetExperiment:
 
         pca = PCA(n_components=2)
         self.reduced = pca.fit_transform(self.scores.values)
-        self.reduced = pd.DataFrame(self.reduced, index=self.scores.index)
+        self.reduced = pd.DataFrame(self.reduced, index=self.scores.index.map(lambda x: x[0]))
 
         # Assign group labels to groups so can visualize colors
         if self.grouping ==  'identities':

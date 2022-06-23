@@ -123,7 +123,7 @@ class IdentityDatasetCreator:
         # Would then have to split into folds
         # Not sure if that would be better or not
         if self.grouping == 'identities':
-            groupings = [tuple(identity) for identity in identities]
+            groupings = [(identity,) for identity in identities]
         elif self.grouping == 'categories':
             groupings = [('race/ethnicity',), ('religion',), ('gender', 'sexuality')]
             #possible_groupings = {tuple(sorted(self.resources[self.grouping][identity])) for identity in identities}

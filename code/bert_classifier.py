@@ -173,5 +173,5 @@ class BertClassifier:
         input_ids, attention_masks= self.create_sentence_embeddings(
                 test['text'].map(preprocess))
         preds = self.model.predict([input_ids, attention_masks],batch_size=32)['logits'].argmax(axis=1)
-        scores = pd.DataFrame(classification_report(test['hate'], preds, output_dict=True))
+        scores = pd.DataFrame(classification_report(test['hate'], preds, output_dict=True, zero_division=0))
         return scores, preds
