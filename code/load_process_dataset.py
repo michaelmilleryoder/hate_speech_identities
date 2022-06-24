@@ -374,6 +374,13 @@ class SbicLoader(DataLoader):
                 for gender in ['men', 'women']:
                     flattened.remove(f'{term} {gender}')
                 flattened.add(f'{term} people')
+    
+        # Remove 'men' from 'gay men, bisexual men, transgender men' since is noisy
+        if all(term in flattened for term in ['gay men', 'transgender men', 'bisexual men']):
+            for term in ['gay', 'transgender', 'bisexual']:
+                flattened.remove(f'{term} men')
+                flattened.add(f'{term} people')
+    
         return list(flattened)
         
 

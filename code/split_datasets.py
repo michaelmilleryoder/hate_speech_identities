@@ -100,9 +100,9 @@ class ComparisonSplits():
             n_special_nonhate = int(len(special_nonhate)/len(data.query('not hate')) * n_samples[False]) # match ratio overall in the dataset
         n_nonhate = len(resampled_no_special.query('not hate'))
         resampled_with_special = pd.concat([
-            resampled_no_special.query('hate').sample(max(n_samples[True]-n_special_hate, 0)), # 0 means with_special hate will be all special
+            resampled_no_special.query('hate').sample(max(n_samples[True]-n_special_hate, 0), random_state=9), # 0 means with_special hate will be all special
             special_hate,
-            resampled_no_special.query('not hate').sample(max(n_samples[False] - n_special_nonhate, 0)),
+            resampled_no_special.query('not hate').sample(max(n_samples[False] - n_special_nonhate, 0), random_state=9),
             flexible_sample(special_nonhate, n_special_nonhate)
             ], axis=0)
         resampled_with_special = resampled_with_special.sample(frac=1, random_state=9)

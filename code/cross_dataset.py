@@ -4,6 +4,7 @@ import pickle
 import pdb
 import itertools
 import json
+import os
 
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import LogisticRegression
@@ -11,7 +12,9 @@ from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.decomposition import PCA
 import pandas as pd
 from tqdm import tqdm
-import plotly.express as px
+#import plotly.express as px
+import seaborn as sns
+from matplotlib import pyplot as plt
 
 from create_identity_datasets import IdentityDatasetCreator
 from bert_classifier import BertClassifier
@@ -25,6 +28,7 @@ class CrossDatasetExperiment:
 
     def __init__(self, processed_datasets, grouping, clf_name, clf_settings, combine: bool = True, 
             create_datasets = False, 
+            n_runs = 1,
             hate_ratio: float = 0.3, 
             ):
         """ Args:
@@ -33,6 +37,7 @@ class CrossDatasetExperiment:
                 clf_settings: dictionary of settings for the classifier
                 create_datasets: whether to recreate both separate and combined datasets. 
                     If False, will just load them. Can also be a list of ['separate', 'combined']
+                n_runs: Number of times to train models and run evaluations (each run's scores are saved)
                 combine: whether to combine identity datasets across dataset sources
         """
         self.grouping = grouping
@@ -41,6 +46,7 @@ class CrossDatasetExperiment:
         self.clf_settings = clf_settings
         self.combine = combine
         self.create_datasets = create_datasets
+        self.n_runs = n_runs
         self.hate_ratio = hate_ratio
         self.sep_identity_datasets = None # separate identity datasets
         self.expanded_datasets = None
@@ -169,33 +175,40 @@ class CrossDatasetExperiment:
         else:
             datasets = self.sep_identity_datasets
     
-        for name, folds in tqdm(sorted(datasets.items()), ncols=100):
-            tqdm.write(str(name))
-            
-            # Build classifier
-            if self.clf_name == 'bert':
-                clf = BertClassifier(**self.clf_settings)
-            elif self.clf_name == 'lr':
-                clf = LogisticRegressionClassifier()
+        pbar = tqdm(total=self.n_runs * len(datasets), ncols=100)
+        for i in range(self.n_runs):
+            tqdm.write(f'Run {i}')
+            #for name, folds in tqdm(sorted(datasets.items()), ncols=100):
+            for name, folds in sorted(datasets.items()):
+                tqdm.write(f'\t{str(name)}')
+                
+                # Build classifier
+                if self.clf_name == 'bert':
+                    clf = BertClassifier(**self.clf_settings)
 
-            # Check for NaNs
-            assert not folds['train']['text'].isnull().values.any()
-            assert not folds['test']['text'].isnull().values.any()
+                elif self.clf_name == 'lr':
+                    clf = LogisticRegressionClassifier()
 
-            # Train model 
-            clf.train(folds['train'])
+                # Check for NaNs
+                assert not folds['train']['text'].isnull().values.any()
+                assert not folds['test']['text'].isnull().values.any()
 
-            # Evaluate
-            score_line = {'train_dataset': name} # a row for each test dataset
-            
-            for test_name, test_folds in sorted(datasets.items()):
-                test_scores, preds = clf.eval(test_folds['test'])
-                #score_line[test_name] = test_scores.loc['f1-score', 'weighted avg']
-                score_line[test_name] = test_scores.loc['f1-score', 'True']
-            scores.append(score_line)
+                # Train model 
+                clf.train(folds['train'])
 
-        self.scores = pd.DataFrame(scores).set_index('train_dataset')
-        scores_outpath = f'../output/cross_dataset/combined_{self.grouping}_{self.clf_name}_scores_{"+".join(self.ic.selected_datasets)}.csv'
+                # Evaluate
+                score_line = {'run': i, 'train_dataset': name} # a row for each test dataset
+                
+                for test_name, test_folds in sorted(datasets.items()):
+                    test_scores, preds = clf.eval(test_folds['test'])
+                    #score_line[test_name] = test_scores.loc['f1-score', 'weighted avg']
+                    score_line[test_name] = test_scores.loc['f1-score', 'True']
+                scores.append(score_line)
+                pbar.update(1)
+
+        self.scores = pd.DataFrame(scores).set_index(['run', 'train_dataset'])
+        out_dirpath = f'../output/cross_dataset/combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}'
+        scores_outpath = os.path.join(out_dirpath, f'scores_{i}runs.csv')
         self.scores.to_csv(scores_outpath)
         tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
 
@@ -217,36 +230,69 @@ class CrossDatasetExperiment:
 
         self.load_resources()
 
+        # Get average scores across runs
+        scores = self.scores.groupby(self.scores.index.get_level_values('run')).mean()
+        pdb.set_trace()
+
         pca = PCA(n_components=2)
-        self.reduced = pca.fit_transform(self.scores.values)
-        self.reduced = pd.DataFrame(self.reduced, index=self.scores.index.map(lambda x: x[0]))
+        self.reduced = pca.fit_transform(scores.values)
+        self.reduced = pd.DataFrame(self.reduced, index=scores.index.get_level_values('train_dataset').map(lambda x: x[0]))
 
         # Assign group labels to groups so can visualize colors
         if self.grouping ==  'identities':
             colname = 'group_label'
             resource = self.group_labels
-            self.reduced[colname] = self.reduced.index.map(lambda x: resource.get(x, [None])[0]) # choose first label
+            self.reduced[colname] = self.reduced.index.map(lambda x: resource.get(x, [None]))
         else:
             colname = None
 
-        # Plot
-        if self.combine:
-            title = f'Prediction weight PCA over combined identity datasets {self.ic.selected_datasets}'
-        else:
-            title = 'Prediction weight PCA over identities within datasets'
-        fig = px.scatter(self.reduced, x=0, y=1, color=colname, 
-            text=self.reduced.index, width=1000, height=800,
-            title=title)
-        fig.update_traces(marker={'size': 20})
-        fig.update_traces(textposition='top center')
+        # Plot (seaborn)
+        sns.set_theme(style='white', font=['Liberation Sans'], font_scale=3, palette="Set2")
+        plt.rcParams['xtick.bottom'] = True
+        plt.rcParams['ytick.left'] = True
+        plt.rcParams['axes.titlepad'] = 50 
+        plt.rcParams['axes.labelpad'] = 30 
+
+        def plotlabel(xvar, yvar, label):
+            # ax.text(xvar+0.002, yvar, label)
+            ax.text(xvar+0.02, yvar+0.01, label)
+
+        plt.figure(figsize=(15,15))
+        plt.axis('equal')
+        plt.title('PCA of cross-identity hate speech prediction performance')
+        plt.tight_layout(pad=4)
+        ax = sns.scatterplot(data=self.reduced, x="0", y="1", hue="group", s=500)
+
+        self.reduced.apply(lambda x: plotlabel(x['0'],  x['1'], x['train_dataset']), axis=1)
+
+        ax.set_xlabel('1st Principal Component')
+        ax.set_ylabel('2nd Principal Component')
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+
+        lgnd = plt.legend()
+        for handle in lgnd.legendHandles:
+            handle.set_sizes([500])
+
+        ## Plot (plotly)
+        #if self.combine:
+        #    title = f'Prediction weight PCA over combined identity datasets {self.ic.selected_datasets}'
+        #else:
+        #    title = 'Prediction weight PCA over identities within datasets'
+        #fig = px.scatter(self.reduced, x=0, y=1, color=colname, 
+        #    text=self.reduced.index, width=1000, height=800,
+        #    title=title)
+        #fig.update_traces(marker={'size': 20})
+        #fig.update_traces(textposition='top center')
 
         # Save out (PCA data and plot)
         if self.combine:
-            outname = f'combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}_pca'
+            outname = f'combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}/pca'
         else:
             outname = f'dataset_{self.grouping}_{self.clf_name}_pca'
         reduced_outpath = f'../output/cross_dataset/{outname}.csv'
-        fig_outpath = f'../output/cross_dataset/{outname}.png'
+        fig_outpath = f'../output/cross_dataset/{outname}.pdf'
         self.reduced.to_csv(reduced_outpath)
-        fig.write_image(fig_outpath)
+        #fig.write_image(fig_outpath) # plotly
+        plt.savefig(fig_outpath, dpi=300)
         tqdm.write(f"Saved dataset identity PCA to {fig_outpath}")
