@@ -188,7 +188,7 @@ class CrossDatasetExperiment:
             # Evaluate
             score_line = {'train_dataset': name} # a row for each test dataset
             
-            for test_name, test_folds in datasets.items():
+            for test_name, test_folds in sorted(datasets.items()):
                 test_scores, preds = clf.eval(test_folds['test'])
                 #score_line[test_name] = test_scores.loc['f1-score', 'weighted avg']
                 score_line[test_name] = test_scores.loc['f1-score', 'True']
