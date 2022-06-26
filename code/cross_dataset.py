@@ -208,7 +208,7 @@ class CrossDatasetExperiment:
 
         self.scores = pd.DataFrame(scores).set_index(['run', 'train_dataset'])
         out_dirpath = f'../output/cross_dataset/combined_{self.grouping}_{self.clf_name}_{"+".join(self.ic.selected_datasets)}'
-        scores_outpath = os.path.join(out_dirpath, f'scores_{i}runs.csv')
+        scores_outpath = os.path.join(out_dirpath, f'scores_{self.n_runs}runs.csv')
         self.scores.to_csv(scores_outpath)
         tqdm.write(f"Saved cross-dataset scores to {scores_outpath}")
 
@@ -231,12 +231,12 @@ class CrossDatasetExperiment:
         self.load_resources()
 
         # Get average scores across runs
-        scores = self.scores.groupby(self.scores.index.get_level_values('run')).mean()
-        pdb.set_trace()
+        scores = self.scores.groupby(self.scores.index.get_level_values('train_dataset')).mean()
 
         pca = PCA(n_components=2)
         self.reduced = pca.fit_transform(scores.values)
-        self.reduced = pd.DataFrame(self.reduced, index=scores.index.get_level_values('train_dataset').map(lambda x: x[0]))
+        self.reduced = pd.DataFrame(self.reduced, index=scores.index.map(lambda x: x[0])
+        pdb.set_trace() # Check if still have the tuple stuff
 
         # Assign group labels to groups so can visualize colors
         if self.grouping ==  'identities':
