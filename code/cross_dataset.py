@@ -235,8 +235,7 @@ class CrossDatasetExperiment:
 
         pca = PCA(n_components=2)
         self.reduced = pca.fit_transform(scores.values)
-        self.reduced = pd.DataFrame(self.reduced, index=scores.index.map(lambda x: x[0])
-        pdb.set_trace() # Check if still have the tuple stuff
+        self.reduced = pd.DataFrame(self.reduced, index=scores.index.map(lambda x: x[0]))
 
         # Assign group labels to groups so can visualize colors
         if self.grouping ==  'identities':
@@ -246,6 +245,7 @@ class CrossDatasetExperiment:
         else:
             colname = None
 
+        # TODO: check if I'm making this plot in plotly or seaborn in Jupyter
         # Plot (seaborn)
         sns.set_theme(style='white', font=['Liberation Sans'], font_scale=3, palette="Set2")
         plt.rcParams['xtick.bottom'] = True

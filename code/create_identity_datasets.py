@@ -254,9 +254,23 @@ class IdentityDatasetCreator:
             pickle.dump(self.expanded_datasets, f)
         
     def save_combined_datasets(self):
+        """ Save out combined identity-specific corpora """
+
+        # Pickle for internal use
         with open(self.combined_path, 'wb') as f:
             pickle.dump(self.combined_folds, f)
         print(f"Saved combined {self.selected_datasets} identity folds out to {self.combined_path}")
+
+        # JSON lines for external use
+        # Transform dataframes
+        dfs = []
+        for grouping in self.combined_folds:
+            dfs.append(pd.concat([
+                    self.combined_folds[grouping]['train'].assign(fold='train'),
+                    self.combined_folds[grouping]['test'].assign(fold='test'),
+                ]).assign(grouping=grouping))
+        out_df = pd.concat(dfs)
+        pdb.set_trace() # check columns
 
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
