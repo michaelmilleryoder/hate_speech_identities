@@ -57,7 +57,7 @@ class IdentityDatasetCreator:
             # n_desired_instances(900)/n_selected_datasets/(4)/max_oversample(2)
             # TODO: improve this process
         self.folds_path = f'../data/identity_splits_{self.hate_ratio}hate.pkl'
-        self.combined_path = None
+        self.combined_path = {} # output path for combined identity corpora, keys 'pickle' 'json'
         self.expanded_path = f'../tmp/expanded_datasets_{self.hate_ratio}hate.pkl'
         self.grouping = None
         self.resources = None
@@ -101,7 +101,8 @@ class IdentityDatasetCreator:
         self.selected_datasets = selected_datasets
         self.grouping = grouping
         self.resources = resources
-        self.combined_path = f'../data/combined_{self.grouping}_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
+        self.combined_path['pickle'] = f'../data/combined_{self.grouping}_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.pkl'
+        self.combined_path['json'] = f'../data/combined_{self.grouping}_{"+".join(self.selected_datasets)}_{self.hate_ratio}hate.jsonl'
         if isinstance(self.create, list) and 'combined' in self.create:
             self.form_combined_datasets()
         else:
@@ -257,9 +258,9 @@ class IdentityDatasetCreator:
         """ Save out combined identity-specific corpora """
 
         # Pickle for internal use
-        with open(self.combined_path, 'wb') as f:
+        with open(self.combined_path['pickle'], 'wb') as f:
             pickle.dump(self.combined_folds, f)
-        print(f"Saved combined {self.selected_datasets} identity folds out to {self.combined_path}")
+        print(f"Saved combined {self.selected_datasets} identity folds out to {self.combined_path['pickle']}")
 
         # JSON lines for external use
         # Transform dataframes
@@ -268,9 +269,17 @@ class IdentityDatasetCreator:
             dfs.append(pd.concat([
                     self.combined_folds[grouping]['train'].assign(fold='train'),
                     self.combined_folds[grouping]['test'].assign(fold='test'),
-                ]).assign(grouping=grouping))
-        out_df = pd.concat(dfs)
-        pdb.set_trace() # check columns
+                ]).assign(grouping='/'.join(grouping)))
+        selected_cols = [
+                'text',
+                'target_groups',
+                'dataset',
+                'grouping',
+                'fold',
+            ]
+        out_df = pd.concat(dfs)[selected_cols]
+        out_df.to_json(self.combined_path['json'], orient='records', lines=True)
+        print(f"Saved combined {self.selected_datasets} identity folds out to {self.combined_path['json']}")
 
     def sample_to_ratio(self, dataset, data, identity):
         """ Sample to a specific hate ratio 
