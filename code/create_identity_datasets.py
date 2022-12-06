@@ -271,11 +271,12 @@ class IdentityDatasetCreator:
                     self.combined_folds[grouping]['test'].assign(fold='test'),
                 ]).assign(grouping='/'.join(grouping)))
         selected_cols = [
+                'grouping',
+                'fold',
                 'text',
                 'target_groups',
                 'dataset',
-                'grouping',
-                'fold',
+                'hate',
             ]
         out_df = pd.concat(dfs)[selected_cols]
         out_df.to_json(self.combined_path['json'], orient='records', lines=True)
