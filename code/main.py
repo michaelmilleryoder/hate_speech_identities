@@ -50,7 +50,7 @@ def main():
         )
         removal_comparison.run(config['classifier']['name'], config['classifier']['settings'])
 
-    # Run identity split PCA
+    # Run identity split generalizations experiments, PCA
     if config['cross_dataset']['run']:
         cross_dataset = CrossDatasetExperiment(datasets, 
             config['cross_dataset']['grouping'],
